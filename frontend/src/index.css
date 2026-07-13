@@ -248,3 +248,105 @@ p {
   min-width: 160px;
 }
 
+/* ── Network Analysis ─────────────────────────────────────────── */
+@keyframes node-pulse {
+  0%   { opacity: 1; r: 0; }
+  70%  { opacity: 0; r: 20; }
+  100% { opacity: 0; r: 20; }
+}
+
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); opacity: 0.6; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+.network-tab {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.78rem; font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: transparent;
+  color: var(--text-secondary);
+}
+.network-tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.network-tab.active {
+  background: var(--accent-primary);
+  color: white;
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.offender-card {
+  padding: 0.8rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: var(--bg-secondary);
+  margin-bottom: 0.4rem;
+}
+.offender-card:hover {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+.offender-card.selected {
+  border-color: var(--accent-primary);
+  background: var(--accent-glow);
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.45rem 0.75rem 0.45rem 2rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.search-input:focus { border-color: var(--accent-primary); }
+.search-input::placeholder { color: var(--text-secondary); }
+
+.assoc-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.65rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+.assoc-row:hover { background: var(--bg-tertiary); border-color: var(--border-color); }
+
+.mo-chip {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 99px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  margin: 0.1rem;
+}
+
+.entity-detail-panel {
+  animation: slide-in-right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.graph-tooltip {
+  position: absolute;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  font-size: 0.78rem;
+  min-width: 140px;
+  z-index: 999;
+}
