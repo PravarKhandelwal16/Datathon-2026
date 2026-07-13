@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   MapContainer, TileLayer, CircleMarker, Popup, useMap
 } from 'react-leaflet';
@@ -10,10 +10,11 @@ import {
 } from 'recharts';
 import {
   AlertTriangle, TrendingUp, MapPin, Clock,
-  Layers, Filter, ChevronRight, ChevronDown, X, Activity,
+  Layers, Filter, ChevronRight, X, Activity,
   Radio, Shield, Eye, BarChart2
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import api from '../services/api';
 
 // ─── Fix Leaflet icon ───────────────────────────────────────────────────────
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -30,131 +31,29 @@ type CrimeCategory = 'All' | 'Theft' | 'Assault' | 'Fraud' | 'Narcotics' | 'Cybe
 type MapLayer = 'hotspot' | 'category' | 'patrol';
 
 interface District {
-  id: string;
   name: string;
   lat: number;
   lng: number;
-  totalFIRs: number;
-  prevPeriodFIRs: number;
+  firs: number;
   severity: Severity;
-  isAlertActive: boolean;
-  alertCategory?: CrimeCategory;
-  alertSpikePct?: number;
-  alertDetectedAt: string;
-  crimesByCategory: Record<string, number>;
-  crimesByHour: number[];          // 24 buckets
-  weeklyTrend: { day: string; count: number }[];
-  stationCount: number;
-  activePatrols: number;
+  alerts: boolean;
+  stations: number;
+  patrols: number;
+  trend: number;
 }
 
-// ─── Mock Data ───────────────────────────────────────────────────────────────
-const DISTRICTS: District[] = [
-  {
-    id: 'bng-urban', name: 'Bengaluru Urban', lat: 12.9716, lng: 77.5946,
-    totalFIRs: 1247, prevPeriodFIRs: 1011, severity: 'critical', isAlertActive: true,
-    alertCategory: 'Theft', alertSpikePct: 143, alertDetectedAt: '02:14 AM',
-    stationCount: 34, activePatrols: 112,
-    crimesByCategory: { Theft: 548, Assault: 274, Fraud: 225, Narcotics: 89, Cyber: 67, Burglary: 44 },
-    crimesByHour: [12,8,5,4,3,4,14,38,55,48,42,40,38,36,34,36,40,52,68,95,112,88,55,28],
-    weeklyTrend: [
-      { day: 'Mon', count: 165 }, { day: 'Tue', count: 178 }, { day: 'Wed', count: 152 },
-      { day: 'Thu', count: 192 }, { day: 'Fri', count: 214 }, { day: 'Sat', count: 198 }, { day: 'Sun', count: 148 }
-    ],
-  },
-  {
-    id: 'bng-rural', name: 'Bengaluru Rural', lat: 13.1986, lng: 77.7066,
-    totalFIRs: 312, prevPeriodFIRs: 295, severity: 'medium', isAlertActive: false,
-    alertDetectedAt: '', stationCount: 12, activePatrols: 28,
-    crimesByCategory: { Theft: 128, Assault: 76, Fraud: 45, Narcotics: 33, Cyber: 18, Burglary: 12 },
-    crimesByHour: [5,3,2,1,1,2,8,18,22,20,18,17,16,15,14,15,18,24,30,38,42,35,22,10],
-    weeklyTrend: [
-      { day: 'Mon', count: 42 }, { day: 'Tue', count: 46 }, { day: 'Wed', count: 38 },
-      { day: 'Thu', count: 50 }, { day: 'Fri', count: 58 }, { day: 'Sat', count: 52 }, { day: 'Sun', count: 26 }
-    ],
-  },
-  {
-    id: 'mysuru', name: 'Mysuru', lat: 12.2958, lng: 76.6394,
-    totalFIRs: 634, prevPeriodFIRs: 378, severity: 'high', isAlertActive: true,
-    alertCategory: 'Burglary', alertSpikePct: 67, alertDetectedAt: '11:42 PM',
-    stationCount: 18, activePatrols: 52,
-    crimesByCategory: { Theft: 242, Assault: 110, Fraud: 88, Narcotics: 55, Cyber: 29, Burglary: 110 },
-    crimesByHour: [8,5,4,3,2,3,10,28,36,32,28,26,24,22,20,22,28,38,50,68,72,60,38,18],
-    weeklyTrend: [
-      { day: 'Mon', count: 82 }, { day: 'Tue', count: 88 }, { day: 'Wed', count: 74 },
-      { day: 'Thu', count: 96 }, { day: 'Fri', count: 110 }, { day: 'Sat', count: 102 }, { day: 'Sun', count: 82 }
-    ],
-  },
-  {
-    id: 'hubballi', name: 'Hubballi-Dharwad', lat: 15.3647, lng: 75.1240,
-    totalFIRs: 487, prevPeriodFIRs: 451, severity: 'medium', isAlertActive: false,
-    alertDetectedAt: '', stationCount: 16, activePatrols: 44,
-    crimesByCategory: { Theft: 198, Assault: 102, Fraud: 78, Narcotics: 62, Cyber: 22, Burglary: 25 },
-    crimesByHour: [6,4,3,2,2,3,9,22,30,26,22,20,18,17,16,17,20,28,38,54,58,48,30,14],
-    weeklyTrend: [
-      { day: 'Mon', count: 62 }, { day: 'Tue', count: 68 }, { day: 'Wed', count: 55 },
-      { day: 'Thu', count: 72 }, { day: 'Fri', count: 84 }, { day: 'Sat', count: 78 }, { day: 'Sun', count: 68 }
-    ],
-  },
-  {
-    id: 'kalaburagi', name: 'Kalaburagi', lat: 17.3297, lng: 76.8200,
-    totalFIRs: 389, prevPeriodFIRs: 272, severity: 'high', isAlertActive: true,
-    alertCategory: 'Narcotics', alertSpikePct: 43, alertDetectedAt: '08:55 PM',
-    stationCount: 14, activePatrols: 36,
-    crimesByCategory: { Theft: 128, Assault: 92, Fraud: 55, Narcotics: 78, Cyber: 16, Burglary: 20 },
-    crimesByHour: [5,3,2,2,1,2,8,18,24,20,18,16,14,13,12,13,16,22,32,48,52,42,26,12],
-    weeklyTrend: [
-      { day: 'Mon', count: 52 }, { day: 'Tue', count: 55 }, { day: 'Wed', count: 45 },
-      { day: 'Thu', count: 60 }, { day: 'Fri', count: 72 }, { day: 'Sat', count: 68 }, { day: 'Sun', count: 37 }
-    ],
-  },
-  {
-    id: 'mangaluru', name: 'Mangaluru', lat: 12.9141, lng: 74.8560,
-    totalFIRs: 298, prevPeriodFIRs: 318, severity: 'low', isAlertActive: false,
-    alertDetectedAt: '', stationCount: 10, activePatrols: 32,
-    crimesByCategory: { Theft: 112, Assault: 68, Fraud: 52, Narcotics: 28, Cyber: 24, Burglary: 14 },
-    crimesByHour: [4,2,2,1,1,2,7,16,22,18,16,14,13,12,11,12,15,20,28,40,44,36,22,10],
-    weeklyTrend: [
-      { day: 'Mon', count: 38 }, { day: 'Tue', count: 42 }, { day: 'Wed', count: 34 },
-      { day: 'Thu', count: 46 }, { day: 'Fri', count: 52 }, { day: 'Sat', count: 48 }, { day: 'Sun', count: 38 }
-    ],
-  },
-  {
-    id: 'belagavi', name: 'Belagavi', lat: 15.8497, lng: 74.4977,
-    totalFIRs: 422, prevPeriodFIRs: 398, severity: 'medium', isAlertActive: false,
-    alertDetectedAt: '', stationCount: 15, activePatrols: 40,
-    crimesByCategory: { Theft: 168, Assault: 95, Fraud: 72, Narcotics: 48, Cyber: 20, Burglary: 19 },
-    crimesByHour: [5,3,2,2,1,2,8,20,27,23,20,18,16,15,14,15,18,24,34,50,54,44,28,12],
-    weeklyTrend: [
-      { day: 'Mon', count: 55 }, { day: 'Tue', count: 60 }, { day: 'Wed', count: 48 },
-      { day: 'Thu', count: 64 }, { day: 'Fri', count: 76 }, { day: 'Sat', count: 70 }, { day: 'Sun', count: 49 }
-    ],
-  },
-  {
-    id: 'shivamogga', name: 'Shivamogga', lat: 13.9299, lng: 75.5681,
-    totalFIRs: 256, prevPeriodFIRs: 262, severity: 'low', isAlertActive: false,
-    alertDetectedAt: '', stationCount: 9, activePatrols: 24,
-    crimesByCategory: { Theft: 98, Assault: 58, Fraud: 44, Narcotics: 30, Cyber: 14, Burglary: 12 },
-    crimesByHour: [3,2,1,1,1,1,6,14,20,16,14,12,11,10,9,10,13,18,25,36,38,30,18,8],
-    weeklyTrend: [
-      { day: 'Mon', count: 32 }, { day: 'Tue', count: 36 }, { day: 'Wed', count: 28 },
-      { day: 'Thu', count: 40 }, { day: 'Fri', count: 46 }, { day: 'Sat', count: 44 }, { day: 'Sun', count: 30 }
-    ],
-  },
-];
-
-// ─── Colour helpers ──────────────────────────────────────────────────────────
+// ─── Constants & Styling ──────────────────────────────────────────────────────
 const SEVERITY_COLOR: Record<Severity, string> = {
-  critical: '#dc2626',
-  high:     '#ea580c',
-  medium:   '#d97706',
-  low:      '#059669',
+  low:      '#059669', // Emerald
+  medium:   '#d97706', // Amber
+  high:     '#ea580c', // Orange
+  critical: '#dc2626', // Red
 };
 const SEVERITY_FILL: Record<Severity, string> = {
-  critical: 'rgba(220,38,38,0.28)',
-  high:     'rgba(234,88,12,0.22)',
-  medium:   'rgba(217,119,6,0.2)',
-  low:      'rgba(5,150,105,0.18)',
+  low:      'rgba(5,150,105,0.06)',
+  medium:   'rgba(217,119,6,0.06)',
+  high:     'rgba(234,88,12,0.06)',
+  critical: 'rgba(220,38,38,0.06)',
 };
 const CATEGORY_COLOR: Record<string, string> = {
   Theft: '#dc2626', Assault: '#ea580c', Fraud: '#d97706',
@@ -180,24 +79,22 @@ const MapRecenter: React.FC<{ center: [number,number]; zoom: number }> = ({ cent
 
 // ─── Sub-component: Popup content ───────────────────────────────────────────
 const DistrictPopup: React.FC<{ d: District }> = ({ d }) => {
-  const delta = d.totalFIRs - d.prevPeriodFIRs;
-  const pct   = Math.round((delta / d.prevPeriodFIRs) * 100);
   return (
     <div style={{ minWidth: 180, fontFamily: 'Inter, sans-serif' }}>
       <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 4 }}>{d.name}</div>
       <div style={{ fontSize: '0.78rem', color: '#555', marginBottom: 6 }}>
-        {d.stationCount} Police Stations · {d.activePatrols} Active Patrols
+        {d.stations} Police Stations · {d.patrols} Active Patrols
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-        <span><b>{d.totalFIRs.toLocaleString()}</b> FIRs</span>
-        <span style={{ color: pct > 0 ? '#dc2626' : '#059669', fontWeight: 600 }}>
-          {pct > 0 ? '↑' : '↓'} {Math.abs(pct)}%
+        <span><b>{d.firs.toLocaleString()}</b> FIRs</span>
+        <span style={{ color: d.trend >= 0 ? '#dc2626' : '#059669', fontWeight: 600 }}>
+          {d.trend >= 0 ? '↑' : '↓'} {Math.abs(d.trend)}%
         </span>
       </div>
-      {d.isAlertActive && (
+      {d.alerts && (
         <div style={{ marginTop: 8, padding: '4px 8px', background: 'rgba(220,38,38,0.1)',
           border: '1px solid rgba(220,38,38,0.3)', borderRadius: 4, fontSize: '0.75rem', color: '#dc2626', fontWeight: 600 }}>
-          ⚠ ACTIVE ALERT: {d.alertCategory} +{d.alertSpikePct}%
+          ⚠ ACTIVE ALERTS DETECTED
         </div>
       )}
       <div style={{ marginTop: 6, fontSize: '0.72rem', color: '#888' }}>Click for full analysis</div>
@@ -207,17 +104,17 @@ const DistrictPopup: React.FC<{ d: District }> = ({ d }) => {
 
 // ─── Sub-component: District Drill-Down Panel ────────────────────────────────
 const DrillDownPanel: React.FC<{
-  district: District;
+  data: any;
+  severity: Severity;
   onClose: () => void;
-}> = ({ district: d, onClose }) => {
-  const delta = d.totalFIRs - d.prevPeriodFIRs;
-  const pct   = Math.round((delta / d.prevPeriodFIRs) * 100);
-  const topCategory = Object.entries(d.crimesByCategory).sort((a, b) => b[1] - a[1])[0];
-  const hourData = d.crimesByHour.map((count, i) => ({ hour: `${i}:00`, count }));
-
-  const categoryData = Object.entries(d.crimesByCategory)
-    .map(([name, count]) => ({ name, count, pct: Math.round((count / d.totalFIRs) * 100) }))
-    .sort((a, b) => b.count - a.count);
+}> = ({ data: d, severity, onClose }) => {
+  const pct = parseInt(d.delta.replace('%', ''));
+  const hourData = d.hours;
+  const categoryData = d.categories.map((c: any) => ({
+    name: c.category,
+    count: Math.round(d.firs * (c.pct / 100)),
+    pct: c.pct
+  }));
 
   return (
     <div className="drill-down-panel" style={{
@@ -232,19 +129,19 @@ const DrillDownPanel: React.FC<{
       <div style={{
         padding: '1.25rem 1.25rem 1rem',
         borderBottom: '1px solid var(--border-color)',
-        background: `linear-gradient(135deg, ${SEVERITY_FILL[d.severity]}, transparent)`,
+        background: `linear-gradient(135deg, ${SEVERITY_FILL[severity]}, transparent)`,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-              <MapPin size={14} color={SEVERITY_COLOR[d.severity]} />
-              <span style={{ fontSize: '0.72rem', fontWeight: 600, color: SEVERITY_COLOR[d.severity], textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {d.severity} RISK
+              <MapPin size={14} color={SEVERITY_COLOR[severity]} />
+              <span style={{ fontSize: '0.72rem', fontWeight: 600, color: SEVERITY_COLOR[severity], textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {severity} RISK
               </span>
             </div>
-            <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{d.name}</h3>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{d.district}</h3>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-              {d.stationCount} stations · {d.activePatrols} active patrols
+              {d.stations} stations · {d.patrols} active patrols
             </div>
           </div>
           <button onClick={onClose} style={{
@@ -255,20 +152,6 @@ const DrillDownPanel: React.FC<{
             <X size={16} />
           </button>
         </div>
-
-        {/* Alert banner */}
-        {d.isAlertActive && (
-          <div style={{
-            marginTop: '0.75rem', padding: '0.5rem 0.75rem',
-            background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)',
-            borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '0.5rem',
-          }}>
-            <div className="pulse-alert" style={{ width: 8, height: 8, background: '#dc2626', flexShrink: 0 }} />
-            <div style={{ fontSize: '0.78rem', color: '#dc2626', fontWeight: 600 }}>
-              ALERT: {d.alertCategory} spike of +{d.alertSpikePct}% detected at {d.alertDetectedAt}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Scrollable content */}
@@ -277,16 +160,16 @@ const DrillDownPanel: React.FC<{
         {/* KPI row */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.6rem' }}>
           {[
-            { label: 'Total FIRs', value: d.totalFIRs.toLocaleString(), sub: 'This period' },
+            { label: 'Total FIRs', value: d.firs.toLocaleString(), sub: 'This period' },
             {
-              label: 'vs Prev Period', value: `${pct > 0 ? '+' : ''}${pct}%`,
-              sub: `${delta > 0 ? '+' : ''}${delta} FIRs`,
+              label: 'vs Prev Period', value: d.delta,
+              sub: 'Historical relative',
               color: pct > 0 ? '#dc2626' : '#059669'
             },
             {
-              label: 'Top Category', value: topCategory[0],
-              sub: `${Math.round((topCategory[1] / d.totalFIRs) * 100)}% of total`,
-              color: CATEGORY_COLOR[topCategory[0]]
+              label: 'Top Category', value: d.topCategory.split(' ')[0],
+              sub: 'Primary head',
+              color: CATEGORY_COLOR[d.topCategory.split(' ')[0]] || 'var(--accent-primary)'
             },
           ].map((item, i) => (
             <div key={i} style={{
@@ -294,7 +177,7 @@ const DrillDownPanel: React.FC<{
               border: '1px solid var(--border-color)',
             }}>
               <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>{item.label}</div>
-              <div style={{ fontSize: '1rem', fontWeight: 700, color: item.color || 'var(--text-primary)' }}>{item.value}</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: item.color || 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.value}</div>
               <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>{item.sub}</div>
             </div>
           ))}
@@ -307,11 +190,11 @@ const DrillDownPanel: React.FC<{
           </div>
           <div style={{ height: 90 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={d.weeklyTrend} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+              <AreaChart data={d.trend} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
                 <defs>
-                  <linearGradient id={`grad-${d.id}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor={SEVERITY_COLOR[d.severity]} stopOpacity={0.35} />
-                    <stop offset="95%" stopColor={SEVERITY_COLOR[d.severity]} stopOpacity={0} />
+                  <linearGradient id={`grad-${d.district}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor={SEVERITY_COLOR[severity]} stopOpacity={0.35} />
+                    <stop offset="95%" stopColor={SEVERITY_COLOR[severity]} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
@@ -321,8 +204,8 @@ const DrillDownPanel: React.FC<{
                   contentStyle={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', borderRadius: 6, fontSize: 11 }}
                   itemStyle={{ color: 'var(--text-primary)' }}
                 />
-                <Area type="monotone" dataKey="count" stroke={SEVERITY_COLOR[d.severity]}
-                  strokeWidth={2} fill={`url(#grad-${d.id})`} dot={false} />
+                <Area type="monotone" dataKey="firs" stroke={SEVERITY_COLOR[severity]}
+                  strokeWidth={2} fill={`url(#grad-${d.district})`} dot={false} name="FIRs" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -334,17 +217,17 @@ const DrillDownPanel: React.FC<{
             <BarChart2 size={13} /> Crime Category Breakdown
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-            {categoryData.map(cat => (
+            {categoryData.map((cat: any) => (
               <div key={cat.name}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-primary)', fontWeight: 500 }}>{cat.name}</span>
-                  <span style={{ fontSize: '0.78rem', color: CATEGORY_COLOR[cat.name], fontWeight: 600 }}>{cat.count} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>({cat.pct}%)</span></span>
+                  <span style={{ fontSize: '0.78rem', color: CATEGORY_COLOR[cat.name] || 'var(--accent-primary)', fontWeight: 600 }}>{cat.count} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>({cat.pct}%)</span></span>
                 </div>
                 <div style={{ height: 5, borderRadius: 99, background: 'var(--bg-tertiary)', overflow: 'hidden' }}>
                   <div style={{
                     height: '100%', borderRadius: 99,
                     width: `${cat.pct}%`,
-                    background: CATEGORY_COLOR[cat.name],
+                    background: CATEGORY_COLOR[cat.name] || 'var(--accent-primary)',
                     transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)',
                   }} />
                 </div>
@@ -377,8 +260,7 @@ const DrillDownPanel: React.FC<{
             ))}
           </div>
         </div>
-
-      </div>{/* /scrollable */}
+      </div>
     </div>
   );
 };
@@ -387,17 +269,17 @@ const DrillDownPanel: React.FC<{
 type AlertSort = 'severity' | 'spike' | 'time';
 const AlertsRail: React.FC<{
   alerts: District[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-}> = ({ alerts, selectedId, onSelect }) => {
+  selectedName: string | null;
+  onSelect: (name: string) => void;
+}> = ({ alerts, selectedName, onSelect }) => {
   const [sort, setSort] = useState<AlertSort>('severity');
 
   const SEVERITY_ORDER: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const sorted = useMemo(() => {
     const a = [...alerts];
     if (sort === 'severity') a.sort((x, y) => SEVERITY_ORDER[x.severity] - SEVERITY_ORDER[y.severity]);
-    if (sort === 'spike')    a.sort((x, y) => (y.alertSpikePct ?? 0) - (x.alertSpikePct ?? 0));
-    if (sort === 'time')     a.sort((x, y) => x.alertDetectedAt.localeCompare(y.alertDetectedAt));
+    if (sort === 'spike')    a.sort((x, y) => y.trend - x.trend);
+    if (sort === 'time')     a.sort((x, y) => x.name.localeCompare(y.name));
     return a;
   }, [alerts, sort]);
 
@@ -447,9 +329,9 @@ const AlertsRail: React.FC<{
           </div>
         )}
         {sorted.map((d, i) => {
-          const isSelected = selectedId === d.id;
+          const isSelected = selectedName === d.name;
           return (
-            <button key={d.id} onClick={() => onSelect(d.id)} className="alert-card-enter" style={{
+            <button key={d.name} onClick={() => onSelect(d.name)} className="alert-card-enter" style={{
               width: '100%', textAlign: 'left',
               background: isSelected ? `${SEVERITY_FILL[d.severity]}` : 'transparent',
               border: isSelected ? `1px solid ${SEVERITY_COLOR[d.severity]}` : '1px solid transparent',
@@ -460,7 +342,7 @@ const AlertsRail: React.FC<{
               {/* Alert header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  {d.isAlertActive && (
+                  {d.alerts && (
                     <div style={{
                       width: 7, height: 7, borderRadius: '50%',
                       background: SEVERITY_COLOR[d.severity],
@@ -472,31 +354,19 @@ const AlertsRail: React.FC<{
                 <span className={`badge badge-${d.severity}`}>{d.severity}</span>
               </div>
 
-              {/* Alert details */}
-              {d.isAlertActive && (
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>
-                  <span style={{ color: CATEGORY_COLOR[d.alertCategory!] || 'var(--accent-primary)', fontWeight: 600 }}>
-                    {d.alertCategory}
-                  </span>
-                  {' '}spike detected at {d.alertDetectedAt}
-                </div>
-              )}
-
               {/* Spike indicator */}
-              {d.alertSpikePct !== undefined && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <TrendingUp size={12} color={SEVERITY_COLOR[d.severity]} />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: SEVERITY_COLOR[d.severity] }}>
-                    +{d.alertSpikePct}%
-                  </span>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>vs 30-day avg</span>
-                </div>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <TrendingUp size={12} color={SEVERITY_COLOR[d.severity]} />
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: SEVERITY_COLOR[d.severity] }}>
+                  +{Math.abs(d.trend)}%
+                </span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>vs 30-day avg</span>
+              </div>
 
               {/* FIR count */}
               <div style={{ marginTop: '0.35rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                  {d.totalFIRs.toLocaleString()} FIRs · {d.stationCount} stations
+                  {d.firs.toLocaleString()} FIRs · {d.stations} stations
                 </span>
                 <ChevronRight size={12} color="var(--text-secondary)" />
               </div>
@@ -525,7 +395,9 @@ export const GeoMap: React.FC = () => {
   const isDark = theme === 'dark';
 
   // ── State
-  const [selectedDistrict, setSelectedDistrict] = useState<District | null>(null);
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [selectedDistrictName, setSelectedDistrictName] = useState<string | null>(null);
+  const [drilldownData, setDrilldownData] = useState<any | null>(null);
   const [timeRange, setTimeRange]   = useState<TimeRange>('7d');
   const [category, setCategory]     = useState<CrimeCategory>('All');
   const [mapLayer, setMapLayer]     = useState<MapLayer>('hotspot');
@@ -533,37 +405,56 @@ export const GeoMap: React.FC = () => {
   const [showSlider, setShowSlider] = useState(false);
   const [mapCenter, setMapCenter]   = useState<[number, number]>([14.5, 76.5]);
   const [mapZoom, setMapZoom]       = useState(7);
+  const [loading, setLoading]       = useState(true);
 
-  // ── Derived
-  const filteredDistricts = useMemo(() => {
-    return DISTRICTS.filter(d => {
-      if (category !== 'All' && !(d.crimesByCategory[category] > 0)) return false;
-      return true;
-    });
-  }, [category]);
+  // Fetch districts on filter update
+  useEffect(() => {
+    async function loadDistricts() {
+      try {
+        setLoading(true);
+        const res = await api.getMapDistricts(category, showSlider ? timeOfDay : null);
+        const mapped = res.map(d => ({
+          ...d,
+          severity: d.severity as Severity
+        }));
+        setDistricts(mapped);
+      } catch (err) {
+        console.error("Map districts loading error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadDistricts();
+  }, [category, timeOfDay, showSlider]);
 
-  const alerts = useMemo(() => filteredDistricts.filter(d => d.isAlertActive), [filteredDistricts]);
+  // Fetch drilldown payload on selection
+  useEffect(() => {
+    async function loadDrilldown() {
+      if (!selectedDistrictName) {
+        setDrilldownData(null);
+        return;
+      }
+      try {
+        const res = await api.getMapDrilldown(selectedDistrictName);
+        setDrilldownData(res);
+      } catch (err) {
+        console.error("Map drilldown loading error:", err);
+      }
+    }
+    loadDrilldown();
+  }, [selectedDistrictName]);
 
-  const totalFIRs      = useMemo(() => filteredDistricts.reduce((s, d) => s + d.totalFIRs, 0), [filteredDistricts]);
-  const activeHotspots = useMemo(() => filteredDistricts.filter(d => d.severity === 'critical' || d.severity === 'high').length, [filteredDistricts]);
-  const peakHour       = useMemo(() => {
-    const sums = new Array(24).fill(0);
-    filteredDistricts.forEach(d => d.crimesByHour.forEach((c, i) => { sums[i] += c; }));
-    const peak = sums.indexOf(Math.max(...sums));
-    return `${peak}:00 – ${peak + 1}:00`;
-  }, [filteredDistricts]);
-  const totalPatrols   = useMemo(() => filteredDistricts.reduce((s, d) => s + d.activePatrols, 0), [filteredDistricts]);
+  // Derived summaries
+  const alerts = useMemo(() => districts.filter(d => d.alerts), [districts]);
+  const totalFIRs      = useMemo(() => districts.reduce((s, d) => s + d.firs, 0), [districts]);
+  const activeHotspots = useMemo(() => districts.filter(d => d.severity === 'critical' || d.severity === 'high').length, [districts]);
+  const totalPatrols   = useMemo(() => districts.reduce((s, d) => s + d.patrols, 0), [districts]);
 
   // Hour-scaled radius
   const getRadius = useCallback((d: District) => {
-    const base = mapLayer === 'hotspot'
-      ? Math.sqrt(d.totalFIRs / 15)
-      : Math.sqrt((d.crimesByCategory[category] || d.totalFIRs) / 10);
-    const hourScale = showSlider
-      ? (d.crimesByHour[timeOfDay] / Math.max(...d.crimesByHour)) * 0.8 + 0.4
-      : 1;
-    return Math.max(8, Math.min(45, base * hourScale));
-  }, [mapLayer, category, showSlider, timeOfDay]);
+    const base = Math.sqrt(d.firs / 1.5);
+    return Math.max(8, Math.min(45, base));
+  }, []);
 
   const getColor = useCallback((d: District) => {
     if (mapLayer === 'category' && category !== 'All') return CATEGORY_COLOR[category] || SEVERITY_COLOR[d.severity];
@@ -571,15 +462,15 @@ export const GeoMap: React.FC = () => {
   }, [mapLayer, category]);
 
   const handleDistrictClick = useCallback((d: District) => {
-    setSelectedDistrict(d);
+    setSelectedDistrictName(d.name);
     setMapCenter([d.lat, d.lng]);
     setMapZoom(10);
   }, []);
 
-  const handleAlertSelect = useCallback((id: string) => {
-    const d = DISTRICTS.find(x => x.id === id);
+  const handleAlertSelect = useCallback((name: string) => {
+    const d = districts.find(x => x.name === name);
     if (d) handleDistrictClick(d);
-  }, [handleDistrictClick]);
+  }, [districts, handleDistrictClick]);
 
   const timeBracket = getTimeBracket(timeOfDay);
 
@@ -593,7 +484,12 @@ export const GeoMap: React.FC = () => {
           {
             icon: <AlertTriangle size={18} color="#dc2626" />,
             label: 'Active Hotspot Districts',
-            value: activeHotspots,
+            value: (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {activeHotspots}
+                {loading && <span className="pulse-alert" style={{ width: 8, height: 8, background: '#dc2626', display: 'inline-block' }} />}
+              </span>
+            ),
             sub: `${alerts.length} with trend alerts`,
             color: '#dc2626',
           },
@@ -601,14 +497,14 @@ export const GeoMap: React.FC = () => {
             icon: <Shield size={18} color="var(--accent-secondary)" />,
             label: 'Total FIRs (Period)',
             value: totalFIRs.toLocaleString(),
-            sub: `Across ${filteredDistricts.length} districts`,
+            sub: `Across ${districts.length} districts`,
             color: 'var(--accent-secondary)',
           },
           {
             icon: <Clock size={18} color="#7c3aed" />,
-            label: 'Peak Crime Window',
-            value: peakHour,
-            sub: 'Aggregated all districts',
+            label: 'Active Hour Frame',
+            value: showSlider ? `${timeOfDay}:00` : 'Rolling 24h',
+            sub: showSlider ? timeBracket.label : 'Continuous scan',
             color: '#7c3aed',
           },
           {
@@ -648,103 +544,88 @@ export const GeoMap: React.FC = () => {
               padding: '0.3rem 0.7rem', borderRadius: 6, fontSize: '0.75rem', fontWeight: timeRange === t ? 700 : 500,
               background: timeRange === t ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
               color: timeRange === t ? 'white' : 'var(--text-secondary)',
-              border: timeRange === t ? 'none' : '1px solid var(--border-color)',
-              cursor: 'pointer', transition: 'all 0.15s ease',
-            }}>{t}</button>
+              border: '1px solid var(--border-color)', cursor: 'pointer', transition: 'all 0.15s ease',
+            }}>
+              {t}
+            </button>
           ))}
         </div>
 
-        <div style={{ width: 1, height: 20, background: 'var(--border-color)' }} />
+        {/* Separator */}
+        <div style={{ width: 1, height: 16, background: 'var(--border-color)' }} />
 
         {/* Crime Category */}
-        <select value={category} onChange={e => setCategory(e.target.value as CrimeCategory)} style={{
-          background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
-          border: '1px solid var(--border-color)', padding: '0.3rem 0.75rem',
-          borderRadius: 6, fontSize: '0.78rem', cursor: 'pointer',
-        }}>
-          {(['All', 'Theft', 'Assault', 'Fraud', 'Narcotics', 'Cyber', 'Burglary'] as CrimeCategory[]).map(c => (
-            <option key={c} value={c}>{c === 'All' ? 'All Crime Types' : c}</option>
+        <select
+          value={category}
+          onChange={e => setCategory(e.target.value as CrimeCategory)}
+          style={{
+            padding: '0.3rem 0.5rem', background: 'var(--bg-tertiary)',
+            color: 'var(--text-primary)', border: '1px solid var(--border-color)',
+            borderRadius: 6, fontSize: '0.75rem', cursor: 'pointer', outline: 'none',
+          }}
+        >
+          {['All', 'Theft', 'Assault', 'Fraud', 'Narcotics', 'Cyber', 'Burglary'].map(cat => (
+            <option key={cat} value={cat}>{cat} (Category)</option>
           ))}
         </select>
 
-        <div style={{ width: 1, height: 20, background: 'var(--border-color)' }} />
-
-        {/* Map Layer */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
-          <Layers size={14} />
+        {/* Map Layers */}
+        <div style={{ display: 'flex', gap: '0.3rem', marginLeft: 'auto' }}>
+          {[
+            { id: 'hotspot', label: 'Hotspots', icon: <Radio size={12} /> },
+            { id: 'category', label: 'By Category', icon: <Layers size={12} /> },
+            { id: 'patrol', label: 'Patrol Coverage', icon: <Shield size={12} /> },
+          ].map(layer => (
+            <button key={layer.id} onClick={() => setMapLayer(layer.id as MapLayer)} style={{
+              padding: '0.3rem 0.7rem', borderRadius: 6, fontSize: '0.75rem', fontWeight: mapLayer === layer.id ? 700 : 500,
+              background: mapLayer === layer.id ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+              color: mapLayer === layer.id ? 'white' : 'var(--text-secondary)',
+              border: '1px solid var(--border-color)', cursor: 'pointer', transition: 'all 0.15s ease',
+              display: 'flex', alignItems: 'center', gap: '0.3rem',
+            }}>
+              {layer.icon} {layer.label}
+            </button>
+          ))}
         </div>
-        {(['hotspot', 'category', 'patrol'] as MapLayer[]).map(l => (
-          <button key={l} onClick={() => setMapLayer(l)} style={{
-            padding: '0.3rem 0.7rem', borderRadius: 6, fontSize: '0.75rem', fontWeight: mapLayer === l ? 700 : 500,
-            background: mapLayer === l ? 'var(--accent-secondary)' : 'var(--bg-tertiary)',
-            color: mapLayer === l ? 'white' : 'var(--text-secondary)',
-            border: mapLayer === l ? 'none' : '1px solid var(--border-color)',
-            cursor: 'pointer', transition: 'all 0.15s ease', textTransform: 'capitalize',
-          }}>
-            {l === 'hotspot' ? 'Hotspot Density' : l === 'category' ? 'By Category' : 'Patrol Coverage'}
-          </button>
-        ))}
 
-        <div style={{ width: 1, height: 20, background: 'var(--border-color)' }} />
-
-        {/* Spatiotemporal toggle */}
-        <button onClick={() => setShowSlider(s => !s)} style={{
-          display: 'flex', alignItems: 'center', gap: '0.4rem',
-          padding: '0.3rem 0.75rem', borderRadius: 6, fontSize: '0.75rem', fontWeight: showSlider ? 700 : 500,
-          background: showSlider ? '#7c3aed' : 'var(--bg-tertiary)',
-          color: showSlider ? 'white' : 'var(--text-secondary)',
-          border: showSlider ? 'none' : '1px solid var(--border-color)',
-          cursor: 'pointer', transition: 'all 0.15s ease',
-        }}>
-          <Clock size={13} /> Spatiotemporal
-          <ChevronDown size={12} style={{ transform: showSlider ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+        <button
+          onClick={() => setShowSlider(!showSlider)}
+          style={{
+            padding: '0.3rem 0.7rem', borderRadius: 6, fontSize: '0.75rem', fontWeight: showSlider ? 700 : 500,
+            background: showSlider ? 'rgba(124,58,237,0.15)' : 'var(--bg-tertiary)',
+            color: showSlider ? '#7c3aed' : 'var(--text-secondary)',
+            border: `1px solid ${showSlider ? 'rgba(124,58,237,0.3)' : 'var(--border-color)'}`,
+            cursor: 'pointer', transition: 'all 0.15s ease',
+            display: 'flex', alignItems: 'center', gap: '0.3rem',
+          }}
+        >
+          <Clock size={12} /> Spatiotemporal (Hour Slider)
         </button>
-
-        <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-          {filteredDistricts.length} districts · Updated: {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-        </span>
       </div>
 
-      {/* ── Time-of-Day Slider (Spatiotemporal) ────────────────────────────── */}
+      {/* ── Spatiotemporal Hour Slider Panel ───────────────────────────────── */}
       {showSlider && (
-        <div className="glass-panel" style={{
-          padding: '0.75rem 1.25rem', flexShrink: 0,
-          background: isDark ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.04)',
-          borderColor: 'rgba(124,58,237,0.2)',
-          display: 'flex', alignItems: 'center', gap: '1.25rem',
+        <div className="glass-panel slide-in-top" style={{
+          padding: '0.65rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1.25rem', flexShrink: 0,
         }}>
-          <div style={{ flexShrink: 0 }}>
-            <div style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Time of Day Filter
-            </div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-              {String(timeOfDay).padStart(2, '0')}:00
-            </div>
-          </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            <input type="range" min={0} max={23} value={timeOfDay}
-              onChange={e => setTimeOfDay(Number(e.target.value))}
-              className="time-slider" style={{ accentColor: '#7c3aed' }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              {[0, 6, 12, 18, 23].map(h => (
-                <span key={h} style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{TIME_LABELS[h]}</span>
-              ))}
-            </div>
-          </div>
-          <div style={{
-            flexShrink: 0, padding: '0.35rem 0.75rem', borderRadius: 6, fontSize: '0.75rem', fontWeight: 600,
-            background: `${timeBracket.color}18`, color: timeBracket.color,
-            border: `1px solid ${timeBracket.color}40`,
+          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '0.3rem', minWidth: 100 }}>
+            ⏱ Hour: {String(timeOfDay).padStart(2,'0')}:00
+          </span>
+          <input
+            type="range" min="0" max="23" value={timeOfDay}
+            onChange={e => setTimeOfDay(parseInt(e.target.value))}
+            style={{
+              flex: 1, accentColor: '#7c3aed', cursor: 'pointer', height: 4,
+              borderRadius: 2, background: 'var(--border-color)', outline: 'none',
+            }}
+          />
+          <span style={{
+            fontSize: '0.74rem', fontWeight: 600, color: timeBracket.color,
+            background: `${timeBracket.color}15`, padding: '0.2rem 0.5rem', borderRadius: 4,
+            minWidth: 120, textAlign: 'center',
           }}>
             {timeBracket.label}
-          </div>
-          <div style={{ flexShrink: 0 }}>
-            <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginBottom: 2 }}>Crime Activity</div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-              {filteredDistricts.reduce((s, d) => s + d.crimesByHour[timeOfDay], 0)} incidents/hr
-            </div>
-          </div>
+          </span>
         </div>
       )}
 
@@ -768,14 +649,14 @@ export const GeoMap: React.FC = () => {
             />
 
             {/* District markers */}
-            {filteredDistricts.map(d => {
-              const isSelected = selectedDistrict?.id === d.id;
+            {districts.map(d => {
+              const isSelected = selectedDistrictName === d.name;
               const color = getColor(d);
               const r     = getRadius(d);
               return (
-                <React.Fragment key={d.id}>
+                <React.Fragment key={d.name}>
                   {/* Alert pulsing outer ring */}
-                  {d.isAlertActive && (
+                  {d.alerts && (
                     <CircleMarker
                       center={[d.lat, d.lng]}
                       radius={r + (d.severity === 'critical' ? 14 : 9)}
@@ -840,17 +721,18 @@ export const GeoMap: React.FC = () => {
         </div>
 
         {/* Drill-down panel (slides in on district click) */}
-        {selectedDistrict && (
+        {selectedDistrictName && drilldownData && (
           <DrillDownPanel
-            district={selectedDistrict}
-            onClose={() => { setSelectedDistrict(null); setMapCenter([14.5, 76.5]); setMapZoom(7); }}
+            data={drilldownData}
+            severity={districts.find(d => d.name === selectedDistrictName)?.severity || 'low'}
+            onClose={() => { setSelectedDistrictName(null); setMapCenter([14.5, 76.5]); setMapZoom(7); }}
           />
         )}
 
         {/* Alerts Rail */}
         <AlertsRail
           alerts={alerts}
-          selectedId={selectedDistrict?.id ?? null}
+          selectedName={selectedDistrictName}
           onSelect={handleAlertSelect}
         />
       </div>

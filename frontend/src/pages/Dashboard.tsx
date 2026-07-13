@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie
@@ -8,6 +8,7 @@ import {
   ArrowUpRight, ArrowDownRight, Clock, Activity,
   Sliders
 } from 'lucide-react';
+import api from '../services/api';
 
 // ─── Constants & Styling ──────────────────────────────────────────────────────
 const C = {
@@ -27,61 +28,6 @@ const TT: React.CSSProperties = {
   color: 'var(--text-primary)',
 };
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const mockTrendDaily = {
-  all: [
-    { name: 'Mon', crimes: 45, clearance: 32 },
-    { name: 'Tue', crimes: 52, clearance: 38 },
-    { name: 'Wed', crimes: 38, clearance: 28 },
-    { name: 'Thu', crimes: 65, clearance: 42 },
-    { name: 'Fri', crimes: 85, clearance: 58 },
-    { name: 'Sat', crimes: 110, clearance: 72 },
-    { name: 'Sun', crimes: 95, clearance: 64 },
-  ],
-  bng: [
-    { name: 'Mon', crimes: 25, clearance: 18 },
-    { name: 'Tue', crimes: 30, clearance: 22 },
-    { name: 'Wed', crimes: 20, clearance: 15 },
-    { name: 'Thu', crimes: 38, clearance: 24 },
-    { name: 'Fri', crimes: 50, clearance: 35 },
-    { name: 'Sat', crimes: 68, clearance: 48 },
-    { name: 'Sun', crimes: 55, clearance: 38 },
-  ],
-  mys: [
-    { name: 'Mon', crimes: 12, clearance: 8 },
-    { name: 'Tue', crimes: 14, clearance: 10 },
-    { name: 'Wed', crimes: 10, clearance: 8 },
-    { name: 'Thu', crimes: 18, clearance: 12 },
-    { name: 'Fri', crimes: 22, clearance: 16 },
-    { name: 'Sat', crimes: 28, clearance: 18 },
-    { name: 'Sun', crimes: 24, clearance: 15 },
-  ],
-};
-
-const mockCategories = {
-  all: [
-    { name: 'Theft', count: 120, color: C.red },
-    { name: 'Assault', count: 85, color: C.orange },
-    { name: 'Fraud', count: 45, color: C.amber },
-    { name: 'Narcotics', count: 35, color: C.violet },
-    { name: 'Cyber', count: 58, color: C.blue },
-  ],
-  bng: [
-    { name: 'Theft', count: 70, color: C.red },
-    { name: 'Assault', count: 42, color: C.orange },
-    { name: 'Fraud', count: 28, color: C.amber },
-    { name: 'Narcotics', count: 18, color: C.violet },
-    { name: 'Cyber', count: 45, color: C.blue },
-  ],
-  mys: [
-    { name: 'Theft', count: 32, color: C.red },
-    { name: 'Assault', count: 28, color: C.orange },
-    { name: 'Fraud', count: 12, color: C.amber },
-    { name: 'Narcotics', count: 9, color: C.violet },
-    { name: 'Cyber', count: 8, color: C.blue },
-  ],
-};
-
 const districtShare = [
   { name: 'Bengaluru Urban', value: 48, color: C.red },
   { name: 'Mysuru', value: 18, color: C.orange },
@@ -90,32 +36,49 @@ const districtShare = [
   { name: 'Others', value: 8, color: C.green },
 ];
 
-const priorityAlerts = [
-  { id: '1', time: '10 mins ago', district: 'Bengaluru Urban', msg: 'Spike in Chain Snatching activity near Majestic (Confidence 97%)', severity: 'critical' },
-  { id: '2', time: '45 mins ago', district: 'Mysuru', msg: 'Cluster of Vehicle Thefts reported near City Market area', severity: 'high' },
-  { id: '3', time: '2 hours ago', district: 'Kalaburagi', msg: 'Cross-border drug courier movement anomaly detected on NH-150A', severity: 'high' },
-  { id: '4', time: '3 hours ago', district: 'Bengaluru Urban', msg: 'ATM Fraud pattern flagged targeting IT park employees', severity: 'medium' },
-];
-
-const activeDispatches = [
-  { id: 'D10', unit: 'Patrol 14 (Majestic)', status: 'On Route', destination: 'KSR Majestic Bus Stand', eta: '3 mins' },
-  { id: 'D12', unit: 'Interceptor 3 (Koramangala)', status: 'Responding', destination: '80 Feet Rd Junction', eta: '5 mins' },
-  { id: 'D15', unit: 'Patrol 9 (Mysuru Market)', status: 'On Scene', destination: 'Devaraja Market', eta: 'Active' },
-  { id: 'D18', unit: 'Cyber Response Unit 2', status: 'Investigating', destination: 'Digital Fraud Center', eta: 'N/A' },
-];
-
 export const Dashboard: React.FC = () => {
   const [district, setDistrict] = useState<'all' | 'bng' | 'mys'>('all');
+  const [stats, setStats] = useState<{
+    incidents: string;
+    riskZones: string;
+    repeatOffenders: string;
+    clearance: string;
+    trend: { name: string; crimes: number; clearance: number }[];
+    categories: { name: string; count: number; color: string }[];
+  } | null>(null);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [dispatches, setDispatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const trendData = mockTrendDaily[district];
-  const catData = mockCategories[district];
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true);
+        const statsRes = await api.getDashboardStats(district);
+        const alertsRes = await api.getDashboardAlerts();
+        const dispatchesRes = await api.getDashboardDispatches();
+        setStats(statsRes);
+        setAlerts(alertsRes);
+        setDispatches(dispatchesRes);
+      } catch (err) {
+        console.error("Dashboard loading error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [district]);
 
-  // Dynamic values depending on filter
-  const stats = {
-    all: { incidents: '342', riskZones: '14', repeatOffenders: '89', clearance: '68%' },
-    bng: { incidents: '205', riskZones: '8', repeatOffenders: '52', clearance: '71%' },
-    mys: { incidents: '97', riskZones: '4', repeatOffenders: '24', clearance: '64%' },
-  }[district];
+  if (loading || !stats) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+          <div className="pulse-alert" style={{ width: 14, height: 14, background: 'var(--accent-primary)' }} />
+          <span>Synchronizing Intelligence Dashboard...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: '2.5rem' }}>
@@ -205,7 +168,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div style={{ flex: 1, minHeight: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+              <AreaChart data={stats.trend} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorIncidents" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="var(--accent-primary)" stopOpacity={0.4}/>
@@ -238,7 +201,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div style={{ flex: 1, minHeight: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={catData} layout="vertical" margin={{ top: 0, right: 10, left: 10, bottom: 5 }} barCategoryGap="25%">
+              <BarChart data={stats.categories} layout="vertical" margin={{ top: 0, right: 10, left: 10, bottom: 5 }} barCategoryGap="25%">
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
                 <XAxis type="number" stroke="var(--text-secondary)" tick={{fontSize: 9}} />
                 <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" tick={{fontSize: 10}} width={65} />
@@ -247,7 +210,7 @@ export const Dashboard: React.FC = () => {
                   contentStyle={TT}
                 />
                 <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                  {catData.map((entry, index) => (
+                  {stats.categories.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Bar>
@@ -309,11 +272,11 @@ export const Dashboard: React.FC = () => {
               <p style={{ margin: 0, fontSize: '0.72rem' }}>AI-detected anomalies requiring dispatch</p>
             </div>
             <span style={{ background: 'rgba(220,38,38,0.12)', color: C.red, padding: '0.15rem 0.5rem', borderRadius: 99, fontSize: '0.65rem', fontWeight: 700 }}>
-              4 Active
+              {alerts.length} Active
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1, overflowY: 'auto' }}>
-            {priorityAlerts.map(alert => (
+            {alerts.map(alert => (
               <div key={alert.id} style={{ display: 'flex', gap: '0.6rem', padding: '0.55rem 0.65rem', borderRadius: 8, background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)' }}>
                 <div style={{ marginTop: 2 }}>
                   {alert.severity === 'critical' ? (
@@ -341,7 +304,7 @@ export const Dashboard: React.FC = () => {
             <p style={{ margin: 0, fontSize: '0.72rem', marginBottom: '1rem' }}>Real-time status of responding units</p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, overflowY: 'auto' }}>
-            {activeDispatches.map(d => {
+            {dispatches.map(d => {
               const statusColor = d.status === 'On Scene' ? C.green : d.status === 'Responding' ? C.orange : d.status === 'On Route' ? C.blue : 'var(--text-secondary)';
               return (
                 <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.65rem', borderRadius: 8, background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', fontSize: '0.74rem' }}>

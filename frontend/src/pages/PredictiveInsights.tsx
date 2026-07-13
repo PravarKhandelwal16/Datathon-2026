@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ResponsiveContainer, Area, LineChart, Line,
   BarChart, Bar, ScatterChart, Scatter, XAxis, YAxis,
@@ -12,6 +12,7 @@ import {
   Info, Clock, Shield, ArrowUpRight,
   ArrowDownRight, Minus, Calendar, Cpu
 } from 'lucide-react';
+import api from '../services/api';
 
 // ─── Palette helpers ──────────────────────────────────────────────────────────
 const C = {
@@ -29,184 +30,7 @@ const TT: React.CSSProperties = {
   color:           'var(--text-primary)',
 };
 
-// ══════════════════════════════════════════════════════════════════════════════
-// MOCK DATA
-// ══════════════════════════════════════════════════════════════════════════════
-
-// ─── Tab 3a: Socio-Economic Correlation ───────────────────────────────────────
-const socioEconDistricts = [
-  { district: 'Bengaluru Urban', urbanization: 94, povertyIdx: 18, crimeRate: 312, unemployment: 6.2,  pop: 1300, literacy: 88 },
-  { district: 'Bengaluru Rural', urbanization: 42, povertyIdx: 34, crimeRate: 98,  unemployment: 9.1,  pop: 110,  literacy: 72 },
-  { district: 'Mysuru',          urbanization: 71, povertyIdx: 24, crimeRate: 194, unemployment: 7.8,  pop: 400,  literacy: 80 },
-  { district: 'Hubballi-Dharwad',urbanization: 62, povertyIdx: 30, crimeRate: 152, unemployment: 8.5,  pop: 290,  literacy: 75 },
-  { district: 'Kalaburagi',      urbanization: 38, povertyIdx: 52, crimeRate: 134, unemployment: 14.2, pop: 210,  literacy: 58 },
-  { district: 'Belagavi',        urbanization: 55, povertyIdx: 38, crimeRate: 118, unemployment: 10.1, pop: 245,  literacy: 68 },
-  { district: 'Mangaluru',       urbanization: 74, povertyIdx: 20, crimeRate: 88,  unemployment: 5.8,  pop: 220,  literacy: 86 },
-  { district: 'Shivamogga',      urbanization: 58, povertyIdx: 28, crimeRate: 82,  unemployment: 7.2,  pop: 180,  literacy: 78 },
-  { district: 'Raichur',         urbanization: 32, povertyIdx: 61, crimeRate: 148, unemployment: 16.4, pop: 190,  literacy: 48 },
-  { district: 'Vijayapura',      urbanization: 44, povertyIdx: 45, crimeRate: 126, unemployment: 12.8, pop: 200,  literacy: 61 },
-];
-const urbanizationOverlay = [
-  { year: 2018, urban: 36, crime: 1820, poverty: 48 },
-  { year: 2019, urban: 38, crime: 1940, poverty: 45 },
-  { year: 2020, urban: 39, crime: 1680, poverty: 46 }, // pandemic dip
-  { year: 2021, urban: 40, crime: 1920, poverty: 44 },
-  { year: 2022, urban: 42, crime: 2180, poverty: 41 },
-  { year: 2023, urban: 44, crime: 2340, poverty: 38 },
-  { year: 2024, urban: 46, crime: 2510, poverty: 36 },
-  { year: 2025, urban: 48, crime: 2680, poverty: 34 },
-];
-
-// ─── Tab 3b: Predictive Risk Scoring ──────────────────────────────────────────
-const riskForecast = [
-  { month: 'Jan', actual: 1820, predicted: 1850,  upper: 1970,  lower: 1730 },
-  { month: 'Feb', actual: 1940, predicted: 1910,  upper: 2040,  lower: 1780 },
-  { month: 'Mar', actual: 2100, predicted: 2080,  upper: 2210,  lower: 1950 },
-  { month: 'Apr', actual: 1980, predicted: 2020,  upper: 2160,  lower: 1880 },
-  { month: 'May', actual: 2240, predicted: 2200,  upper: 2350,  lower: 2050 },
-  { month: 'Jun', actual: 2380, predicted: 2350,  upper: 2500,  lower: 2200 },
-  { month: 'Jul', actual: 2510, predicted: 2480,  upper: 2640,  lower: 2320 },
-  { month: 'Aug', actual: null, predicted: 2620,  upper: 2800,  lower: 2440 },
-  { month: 'Sep', actual: null, predicted: 2750,  upper: 2950,  lower: 2550 },
-  { month: 'Oct', actual: null, predicted: 2900,  upper: 3110,  lower: 2690 },
-  { month: 'Nov', actual: null, predicted: 3040,  upper: 3270,  lower: 2810 },
-  { month: 'Dec', actual: null, predicted: 3180,  upper: 3420,  lower: 2940 },
-];
-const districtRiskScores = [
-  { district: 'Bengaluru Urban', current: 91, predicted: 96, trend: 'up',   category: 'critical' },
-  { district: 'Kalaburagi',      current: 78, predicted: 85, trend: 'up',   category: 'high' },
-  { district: 'Raichur',         current: 74, predicted: 80, trend: 'up',   category: 'high' },
-  { district: 'Mysuru',          current: 69, predicted: 72, trend: 'up',   category: 'high' },
-  { district: 'Vijayapura',      current: 64, predicted: 66, trend: 'stable', category: 'medium' },
-  { district: 'Belagavi',        current: 58, predicted: 55, trend: 'down', category: 'medium' },
-  { district: 'Hubballi-Dharwad',current: 55, predicted: 57, trend: 'stable', category: 'medium' },
-  { district: 'Mangaluru',       current: 38, predicted: 35, trend: 'down', category: 'low' },
-  { district: 'Shivamogga',      current: 32, predicted: 30, trend: 'down', category: 'low' },
-  { district: 'Bengaluru Rural', current: 44, predicted: 46, trend: 'up',   category: 'medium' },
-];
-const crimeTypeForecast = [
-  { category: 'Theft',      current: 42, q1: 44, q2: 47, q3: 51 },
-  { category: 'Assault',    current: 18, q1: 17, q2: 16, q3: 15 },
-  { category: 'Fraud',      current: 15, q1: 18, q2: 22, q3: 26 },
-  { category: 'Narcotics',  current: 12, q1: 14, q2: 16, q3: 19 },
-  { category: 'Cyber',      current: 8,  q1: 12, q2: 16, q3: 22 },
-  { category: 'Burglary',   current: 5,  q1: 4,  q2: 4,  q3: 3 },
-];
-
-// ─── Tab 3c: Anomaly Detection ─────────────────────────────────────────────────
-const anomalyTimeSeries = [
-  { time: '00:00', rate: 12,  baseline: 14, anomaly: null },
-  { time: '01:00', rate: 8,   baseline: 10, anomaly: null },
-  { time: '02:00', rate: 6,   baseline: 8,  anomaly: null },
-  { time: '03:00', rate: 5,   baseline: 7,  anomaly: null },
-  { time: '04:00', rate: 4,   baseline: 6,  anomaly: null },
-  { time: '05:00', rate: 7,   baseline: 8,  anomaly: null },
-  { time: '06:00', rate: 18,  baseline: 16, anomaly: null },
-  { time: '07:00', rate: 38,  baseline: 35, anomaly: null },
-  { time: '08:00', rate: 52,  baseline: 50, anomaly: null },
-  { time: '09:00', rate: 48,  baseline: 46, anomaly: null },
-  { time: '10:00', rate: 44,  baseline: 42, anomaly: null },
-  { time: '11:00', rate: 41,  baseline: 40, anomaly: null },
-  { time: '12:00', rate: 55,  baseline: 44, anomaly: 55 }, // lunch spike anomaly
-  { time: '13:00', rate: 48,  baseline: 42, anomaly: null },
-  { time: '14:00', rate: 40,  baseline: 38, anomaly: null },
-  { time: '15:00', rate: 38,  baseline: 36, anomaly: null },
-  { time: '16:00', rate: 42,  baseline: 40, anomaly: null },
-  { time: '17:00', rate: 58,  baseline: 52, anomaly: null },
-  { time: '18:00', rate: 72,  baseline: 62, anomaly: null },
-  { time: '19:00', rate: 88,  baseline: 70, anomaly: 88 }, // evening rush anomaly
-  { time: '20:00', rate: 138, baseline: 76, anomaly: 138 }, // major anomaly
-  { time: '21:00', rate: 102, baseline: 74, anomaly: 102 },
-  { time: '22:00', rate: 64,  baseline: 58, anomaly: null },
-  { time: '23:00', rate: 28,  baseline: 30, anomaly: null },
-];
-interface AnomalyEvent {
-  id: string; time: string; district: string; category: string;
-  deviation: number; confidence: number; severity: 'critical' | 'high' | 'medium';
-  description: string; linkedCases: number;
-}
-const anomalyEvents: AnomalyEvent[] = [
-  { id: 'A1', time: '20:14', district: 'Bengaluru Urban', category: 'Chain Snatching', deviation: 81, confidence: 97, severity: 'critical', description: 'Activity rate 81% above 30-day baseline. 14 incidents in 45 min window near Majestic. Coordinated gang pattern suspected.', linkedCases: 14 },
-  { id: 'A2', time: '19:08', district: 'Mysuru',          category: 'Vehicle Theft',   deviation: 26, confidence: 84, severity: 'high',     description: 'Cluster of 6 vehicle thefts in a 3km radius near Mysuru City Market. Same MO as FIR/189/2024 gang.', linkedCases: 6 },
-  { id: 'A3', time: '12:22', district: 'Bengaluru Urban', category: 'ATM Fraud',       deviation: 25, confidence: 79, severity: 'high',     description: 'Unusual spike in ATM fraud complaints (9 cases) during lunch hour — targets office-goers near CBD.', linkedCases: 9 },
-  { id: 'A4', time: '21:05', district: 'Kalaburagi',      category: 'Narcotics',       deviation: 44, confidence: 91, severity: 'critical', description: 'Border area activity 44% above norm. Suspected cross-state drug courier movement along NH-150A.', linkedCases: 3 },
-];
-
-// ─── Tab 4: Pattern & Trend Discovery ─────────────────────────────────────────
-const temporalHeatmap: { hour: number; day: string; value: number }[] = [];
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-const baseHourPattern = [5,3,2,2,2,3,8,28,45,40,36,34,33,31,30,32,38,52,70,95,110,82,50,22];
-DAYS.forEach((day, di) => {
-  baseHourPattern.forEach((base, hour) => {
-    const dayFactor = di >= 5 ? 1.35 : 1; // weekends higher
-    const noise = (Math.random() - 0.5) * 14;
-    temporalHeatmap.push({ hour, day, value: Math.max(1, Math.round(base * dayFactor + noise)) });
-  });
-});
-
-const monthlyTrend12 = [
-  { month: 'Aug 24', theft: 320, assault: 140, fraud: 95, narcotics: 72, cyber: 48 },
-  { month: 'Sep 24', theft: 298, assault: 128, fraud: 108, narcotics: 68, cyber: 55 },
-  { month: 'Oct 24', theft: 345, assault: 152, fraud: 112, narcotics: 80, cyber: 60 },
-  { month: 'Nov 24', theft: 312, assault: 135, fraud: 125, narcotics: 74, cyber: 72 },
-  { month: 'Dec 24', theft: 368, assault: 164, fraud: 118, narcotics: 88, cyber: 78 },
-  { month: 'Jan 25', theft: 388, assault: 158, fraud: 140, narcotics: 92, cyber: 85 },
-  { month: 'Feb 25', theft: 355, assault: 142, fraud: 155, narcotics: 86, cyber: 98 },
-  { month: 'Mar 25', theft: 410, assault: 172, fraud: 162, narcotics: 98, cyber: 108 },
-  { month: 'Apr 25', theft: 398, assault: 168, fraud: 172, narcotics: 105, cyber: 118 },
-  { month: 'May 25', theft: 432, assault: 180, fraud: 185, narcotics: 112, cyber: 128 },
-  { month: 'Jun 25', theft: 448, assault: 185, fraud: 198, narcotics: 120, cyber: 140 },
-  { month: 'Jul 25', theft: 465, assault: 188, fraud: 212, narcotics: 128, cyber: 155 },
-];
-
-const resourceDeployment = [
-  { district: 'Bengaluru Urban', required: 112, deployed: 88,  gap: 24 },
-  { district: 'Kalaburagi',      required: 52,  deployed: 34,  gap: 18 },
-  { district: 'Raichur',         required: 44,  deployed: 28,  gap: 16 },
-  { district: 'Mysuru',          required: 68,  deployed: 52,  gap: 16 },
-  { district: 'Vijayapura',      required: 40,  deployed: 30,  gap: 10 },
-  { district: 'Belagavi',        required: 48,  deployed: 44,  gap: 4  },
-  { district: 'Hubballi-Dharwad',required: 44,  deployed: 42,  gap: 2  },
-  { district: 'Mangaluru',       required: 36,  deployed: 38,  gap: -2 },
-  { district: 'Shivamogga',      required: 28,  deployed: 30,  gap: -2 },
-];
-
-// ─── Tab 5: Network & Behavioral Analysis ─────────────────────────────────────
-const moFrequencyTrend = [
-  { month: 'Sep 24', chainSnatch: 48,  vehicleTheft: 62, pickpocket: 38, houseBrk: 22, atmFraud: 15, narcotics: 28 },
-  { month: 'Oct 24', chainSnatch: 55,  vehicleTheft: 58, pickpocket: 42, houseBrk: 25, atmFraud: 18, narcotics: 32 },
-  { month: 'Nov 24', chainSnatch: 62,  vehicleTheft: 65, pickpocket: 40, houseBrk: 28, atmFraud: 24, narcotics: 38 },
-  { month: 'Dec 24', chainSnatch: 70,  vehicleTheft: 72, pickpocket: 52, houseBrk: 32, atmFraud: 28, narcotics: 42 },
-  { month: 'Jan 25', chainSnatch: 65,  vehicleTheft: 68, pickpocket: 45, houseBrk: 30, atmFraud: 35, narcotics: 48 },
-  { month: 'Feb 25', chainSnatch: 72,  vehicleTheft: 75, pickpocket: 50, houseBrk: 35, atmFraud: 42, narcotics: 52 },
-  { month: 'Mar 25', chainSnatch: 80,  vehicleTheft: 80, pickpocket: 58, houseBrk: 38, atmFraud: 50, narcotics: 58 },
-  { month: 'Apr 25', chainSnatch: 88,  vehicleTheft: 85, pickpocket: 62, houseBrk: 40, atmFraud: 60, narcotics: 64 },
-  { month: 'May 25', chainSnatch: 95,  vehicleTheft: 92, pickpocket: 68, houseBrk: 44, atmFraud: 72, narcotics: 70 },
-  { month: 'Jun 25', chainSnatch: 102, vehicleTheft: 98, pickpocket: 75, houseBrk: 48, atmFraud: 84, narcotics: 78 },
-];
-const suspectProfileRadar = [
-  { trait: 'Recidivism',      value: 82 },
-  { trait: 'Gang Affiliation',value: 68 },
-  { trait: 'Cross-District',  value: 74 },
-  { trait: 'Weapon Use',      value: 45 },
-  { trait: 'Cyber Overlay',   value: 38 },
-  { trait: 'Night Activity',  value: 71 },
-  { trait: 'Victim Profile',  value: 60 },
-];
-const orgCrimeNetwork = [
-  { name: 'Majestic Gang (BNG)',  members: 7,  activeCases: 12, riskScore: 96, trend: 'up',   moTags: ['Chain Snatching','Pickpocket','Vehicle Theft'] },
-  { name: 'NH-150A Cartel',       members: 12, activeCases: 8,  riskScore: 91, trend: 'up',   moTags: ['Narcotics','Extortion','Land Grab'] },
-  { name: 'Mysuru Market Crew',   members: 4,  activeCases: 6,  riskScore: 78, trend: 'stable', moTags: ['Vehicle Theft','House Breaking'] },
-  { name: 'Digital Fraud Ring',   members: 9,  activeCases: 18, riskScore: 85, trend: 'up',   moTags: ['ATM Fraud','Cyber','Identity Theft'] },
-  { name: 'Coastal Smugglers',    members: 15, activeCases: 4,  riskScore: 72, trend: 'down', moTags: ['Narcotics','Smuggling'] },
-];
-const jxnMoMatrix = [
-  { district: 'BNG Urban', chainSnatch: 95, vehicleTheft: 78, fraud: 68, narcotics: 48, burglary: 32 },
-  { district: 'Mysuru',    chainSnatch: 60, vehicleTheft: 88, fraud: 42, narcotics: 38, burglary: 75 },
-  { district: 'Kalaburagi',chainSnatch: 30, vehicleTheft: 45, fraud: 35, narcotics: 92, burglary: 28 },
-  { district: 'Hubballi',  chainSnatch: 50, vehicleTheft: 62, fraud: 55, narcotics: 44, burglary: 38 },
-  { district: 'Belagavi',  chainSnatch: 42, vehicleTheft: 58, fraud: 48, narcotics: 52, burglary: 30 },
-];
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SHARED COMPONENTS
@@ -233,8 +57,6 @@ const StatBadge: React.FC<{ label: string; value: string | number; color: string
     </div>
   );
 
-// SectionLabel reserved for future panels
-
 const RiskBar: React.FC<{ score: number; max?: number }> = ({ score, max = 100 }) => {
   const pct = (score / max) * 100;
   const color = score >= 85 ? C.red : score >= 65 ? C.orange : score >= 45 ? C.amber : C.green;
@@ -250,7 +72,7 @@ const RiskBar: React.FC<{ score: number; max?: number }> = ({ score, max = 100 }
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ─── TAB: Socio-Economic Correlation ─────────────────────────────────────────
-const TabSocioEcon: React.FC = () => (
+const TabSocioEcon: React.FC<{ districts: any[]; overlay: any[] }> = ({ districts, overlay }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
     {/* Ribbon */}
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
@@ -289,7 +111,7 @@ const TabSocioEcon: React.FC = () => (
                   );
                 }}
               />
-              <Scatter data={socioEconDistricts} fill={C.violet}
+              <Scatter data={districts} fill={C.violet}
                 shape={(props: any) => {
                   const { cx, cy, payload } = props;
                   const r = Math.sqrt(payload.pop) * 0.8;
@@ -306,7 +128,7 @@ const TabSocioEcon: React.FC = () => (
       <Panel title="Urbanization Growth vs. Crime Trend" subtitle="Karnataka 2018–2025 aggregated">
         <div style={{ height: '350px' }}>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={urbanizationOverlay} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
+            <ComposedChart data={overlay} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
               <XAxis dataKey="year" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
               <YAxis yAxisId="left" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
@@ -334,7 +156,7 @@ const TabSocioEcon: React.FC = () => (
             </tr>
           </thead>
           <tbody>
-            {socioEconDistricts.sort((a,b) => b.crimeRate - a.crimeRate).map((d, i) => {
+            {[...districts].sort((a,b) => b.crimeRate - a.crimeRate).map((d, i) => {
               const risk = Math.round(d.crimeRate / 3.5 + d.povertyIdx * 0.4 + (100 - d.literacy) * 0.3 + d.unemployment * 1.2);
               const riskColor = risk >= 80 ? C.red : risk >= 60 ? C.orange : risk >= 40 ? C.amber : C.green;
               return (
@@ -359,7 +181,7 @@ const TabSocioEcon: React.FC = () => (
 );
 
 // ─── TAB: Predictive Risk Scoring ─────────────────────────────────────────────
-const TabPredictive: React.FC = () => (
+const TabPredictive: React.FC<{ forecast: any[]; districts: any[]; categories: any[] }> = ({ forecast, districts, categories }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
       <StatBadge label="Forecast Horizon"     value="6 mo"  color={C.blue}   icon={<Calendar size={16} color={C.blue} />}   sub="AI confidence: 87%" />
@@ -373,7 +195,7 @@ const TabPredictive: React.FC = () => (
       <Panel title="Crime Volume Forecast — Karnataka" subtitle="AI model prediction with 80% confidence interval · Dashed = projected">
         <div style={{ height: '350px' }}>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={riskForecast} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
+            <ComposedChart data={forecast} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
               <XAxis dataKey="month" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
               <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} domain={[1500, 3600]} />
@@ -395,7 +217,7 @@ const TabPredictive: React.FC = () => (
       {/* District risk scores */}
       <Panel title="District AI Risk Scores" subtitle="Current vs predicted next quarter">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '350px', overflowY: 'auto' }}>
-          {districtRiskScores.map(d => {
+          {districts.map((d: any) => {
             const color = d.current >= 85 ? C.red : d.current >= 65 ? C.orange : d.current >= 45 ? C.amber : C.green;
             const trendIcon = d.trend === 'up' ? <ArrowUpRight size={12} color={C.red} /> : d.trend === 'down' ? <ArrowDownRight size={12} color={C.green} /> : <Minus size={12} color={C.amber} />;
             return (
@@ -420,7 +242,7 @@ const TabPredictive: React.FC = () => (
     <Panel title="Crime Category Growth Forecast — Next 3 Quarters (%)" style={{ flexShrink: 0 }}>
       <div style={{ height: '220px' }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={crimeTypeForecast} barCategoryGap="30%" margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+          <BarChart data={categories} barCategoryGap="30%" margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
             <XAxis dataKey="category" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
             <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} unit="%" />
@@ -438,13 +260,26 @@ const TabPredictive: React.FC = () => (
 );
 
 // ─── TAB: Anomaly Detection ───────────────────────────────────────────────────
-const TabAnomaly: React.FC = () => {
-  const [selected, setSelected] = useState<AnomalyEvent | null>(anomalyEvents[0]);
+interface AnomalyEvent {
+  id: string; time: string; district: string; category: string;
+  deviation: number; confidence: number; severity: 'critical' | 'high' | 'medium';
+  description: string; linkedCases: number;
+}
+
+const TabAnomaly: React.FC<{ timeseries: any[]; events: AnomalyEvent[] }> = ({ timeseries, events }) => {
+  const [selected, setSelected] = useState<AnomalyEvent | null>(events[0] || null);
+
+  useEffect(() => {
+    if (events.length > 0 && !selected) {
+      setSelected(events[0]);
+    }
+  }, [events, selected]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
-        <StatBadge label="Anomalies Detected"   value={anomalyEvents.length}    color={C.red}    icon={<Zap size={16} color={C.red} />}    sub="Last 24 hours" />
-        <StatBadge label="Critical Anomalies"   value={anomalyEvents.filter(a => a.severity === 'critical').length} color={C.red} icon={<AlertTriangle size={16} color={C.red} />} sub="Immediate attention" />
+        <StatBadge label="Anomalies Detected"   value={events.length}    color={C.red}    icon={<Zap size={16} color={C.red} />}    sub="Last 24 hours" />
+        <StatBadge label="Critical Anomalies"   value={events.filter(a => a.severity === 'critical').length} color={C.red} icon={<AlertTriangle size={16} color={C.red} />} sub="Immediate attention" />
         <StatBadge label="Avg Deviation"        value="44%"  color={C.orange} icon={<Activity size={16} color={C.orange} />} sub="Above baseline" />
         <StatBadge label="Detection Confidence" value="88%"  color={C.green}  icon={<Shield size={16} color={C.green} />}  sub="ML model accuracy" />
       </div>
@@ -454,7 +289,7 @@ const TabAnomaly: React.FC = () => {
         <Panel title="24-Hour Activity vs. Baseline — Anomaly Detection" subtitle="Orange dots = detected anomalies exceeding 2σ threshold">
           <div style={{ height: '350px' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={anomalyTimeSeries} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
+              <ComposedChart data={timeseries} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
                 <XAxis dataKey="time" tick={{ fill: 'var(--text-secondary)', fontSize: 9 }} interval={2} />
                 <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
@@ -479,7 +314,7 @@ const TabAnomaly: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <Panel title="Detected Anomaly Events" style={{ flex: '0 0 auto' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              {anomalyEvents.map(ev => (
+              {events.map(ev => (
                 <button key={ev.id} onClick={() => setSelected(ev)} style={{
                   textAlign: 'left', padding: '0.55rem 0.65rem', borderRadius: 7,
                   border: `1px solid ${selected?.id === ev.id ? (ev.severity === 'critical' ? C.red : C.orange) : 'var(--border-color)'}`,
@@ -488,12 +323,12 @@ const TabAnomaly: React.FC = () => {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: ev.severity === 'critical' ? C.red : C.orange, flexShrink: 0 }} />
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: ev.severity === 'critical' ? C.red : ev.severity === 'high' ? C.orange : C.amber, flexShrink: 0 }} />
                       <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>{ev.district}</span>
                     </div>
                     <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>{ev.time}</span>
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: ev.severity === 'critical' ? C.red : C.orange, fontWeight: 600, marginTop: 2 }}>
+                  <div style={{ fontSize: '0.72rem', color: ev.severity === 'critical' ? C.red : ev.severity === 'high' ? C.orange : C.amber, fontWeight: 600, marginTop: 2 }}>
                     {ev.category} · +{ev.deviation}% deviation
                   </div>
                 </button>
@@ -506,7 +341,7 @@ const TabAnomaly: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '200px', overflowY: 'auto' }}>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {[
-                    { l: 'Severity', v: selected.severity, color: selected.severity === 'critical' ? C.red : C.orange },
+                    { l: 'Severity', v: selected.severity, color: selected.severity === 'critical' ? C.red : selected.severity === 'high' ? C.orange : C.amber },
                     { l: 'Confidence', v: `${selected.confidence}%`, color: C.blue },
                     { l: 'Linked Cases', v: selected.linkedCases, color: C.violet },
                   ].map(item => (
@@ -532,11 +367,10 @@ const TabAnomaly: React.FC = () => {
 };
 
 // ─── TAB: Pattern & Trend Discovery ──────────────────────────────────────────
-const TabPatterns: React.FC = () => {
-  // Build mini heatmap cell data
-  const cellMax = Math.max(...temporalHeatmap.map(c => c.value));
+const TabPatterns: React.FC<{ heatmap: any[]; trends: any[]; gaps: any[] }> = ({ heatmap, trends, gaps }) => {
+  const cellMax = Math.max(...heatmap.map(c => c.value), 1);
   return (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
         <StatBadge label="Peak Crime Day"   value="Saturday"  color={C.red}    icon={<Calendar size={16} color={C.red} />}    sub="22% above weekday avg" />
         <StatBadge label="Peak Crime Hour"  value="20:00–21:00" color={C.orange} icon={<Clock size={16} color={C.orange} />} sub="110 avg incidents/hr" />
@@ -558,7 +392,7 @@ const TabPatterns: React.FC = () => {
               ))}
             </div>
             {DAYS.map(day => {
-              const row = temporalHeatmap.filter(c => c.day === day);
+              const row = heatmap.filter(c => c.day === day);
               return (
                 <div key={day} style={{ display: 'grid', gridTemplateColumns: '36px repeat(24, 1fr)', gap: 2, marginBottom: 2 }}>
                   <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', fontWeight: 600 }}>{day}</div>
@@ -595,7 +429,7 @@ const TabPatterns: React.FC = () => {
           <Panel title="12-Month Crime Category Trends" subtitle="All major categories — Karnataka" style={{ flex: 1 }}>
             <div style={{ height: '250px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthlyTrend12} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                <LineChart data={trends} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
                   <XAxis dataKey="month" tick={{ fill: 'var(--text-secondary)', fontSize: 9 }} interval={2} />
                   <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
@@ -615,13 +449,13 @@ const TabPatterns: React.FC = () => {
           <Panel title="Patrol Resource Deployment vs. Requirement" style={{ flex: '0 0 auto' }}>
             <div style={{ height: '200px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={resourceDeployment} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }} barCategoryGap="30%">
+                <BarChart data={gaps} layout="vertical" margin={{ top: 0, right: 30, left: 60, bottom: 0 }} barCategoryGap="30%">
                   <XAxis type="number" tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
                   <YAxis dataKey="district" type="category" tick={{ fill: 'var(--text-secondary)', fontSize: 9 }} width={58} />
                   <Tooltip contentStyle={TT} />
                   <Bar dataKey="deployed"  name="Deployed"   stackId="a" fill={C.green} radius={[0,0,0,0]} />
                   <Bar dataKey="gap" name="Gap / Surplus" stackId="a" fill={C.red} radius={[0,3,3,0]}>
-                    {resourceDeployment.map((entry, i) => (
+                    {gaps.map((entry, i) => (
                       <Cell key={i} fill={entry.gap > 0 ? C.red : C.teal} />
                     ))}
                   </Bar>
@@ -636,10 +470,10 @@ const TabPatterns: React.FC = () => {
 };
 
 // ─── TAB: Network & Behavioral Analysis ───────────────────────────────────────
-const TabNetworkBehavior: React.FC = () => (
+const TabNetworkBehavior: React.FC<{ moTrend: any[]; radar: any[]; networks: any[]; matrix: any[] }> = ({ moTrend, radar, networks, matrix }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
-      <StatBadge label="Active Crime Networks"  value="5"    color={C.pink}   icon={<Network size={16} color={C.pink} />}   sub="Identified organized groups" />
+      <StatBadge label="Active Crime Networks"  value={networks.length}    color={C.pink}   icon={<Network size={16} color={C.pink} />}   sub="Identified organized groups" />
       <StatBadge label="Top MO: Chain Snatching" value="+112%" color={C.red}  icon={<TrendingUp size={16} color={C.red} />} sub="12-month growth" />
       <StatBadge label="Cross-Jurisdiction MOs"  value="4"    color={C.violet} icon={<MapPin size={16} color={C.violet} />} sub="Spanning 2+ districts" />
       <StatBadge label="Repeat MO Match Rate"    value="78%"  color={C.green}  icon={<Search size={16} color={C.green} />}  sub="FIR-to-profile linkage" />
@@ -651,7 +485,7 @@ const TabNetworkBehavior: React.FC = () => (
         <Panel title="Modus Operandi Frequency Trend" subtitle="Monthly incident count by MO type — all Karnataka" style={{ flex: 1 }}>
           <div style={{ height: '250px' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={moFrequencyTrend} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+              <LineChart data={moTrend} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: 'var(--text-secondary)', fontSize: 9 }} interval={2} />
                 <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
@@ -680,7 +514,7 @@ const TabNetworkBehavior: React.FC = () => (
                 </tr>
               </thead>
               <tbody>
-                {jxnMoMatrix.map((row, _i) => (
+                {matrix.map((row, _i) => (
                   <tr key={row.district} style={{ borderBottom: '1px solid var(--border-color)' }}>
                     <td style={{ padding: '0.4rem 0.6rem', fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.75rem' }}>{row.district}</td>
                     {[row.chainSnatch, row.vehicleTheft, row.fraud, row.narcotics, row.burglary].map((v, j) => {
@@ -707,7 +541,7 @@ const TabNetworkBehavior: React.FC = () => (
         <Panel title="Aggregate Suspect Behavioral Profile" subtitle="Trait scoring across all repeat offenders" style={{ flex: 1 }}>
           <div style={{ height: '250px' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={suspectProfileRadar} cx="50%" cy="50%" outerRadius="75%">
+              <RadarChart data={radar} cx="50%" cy="50%" outerRadius="75%">
                 <PolarGrid stroke="var(--border-color)" />
                 <PolarAngleAxis dataKey="trait" tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
                 <PolarRadiusAxis angle={20} domain={[0, 100]} tick={{ fill: 'var(--text-secondary)', fontSize: 9 }} />
@@ -721,7 +555,7 @@ const TabNetworkBehavior: React.FC = () => (
         {/* Org crime network cards */}
         <Panel title="Identified Crime Networks" subtitle="Risk-ranked organized groups" style={{ flex: '0 0 auto' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {orgCrimeNetwork.map(org => {
+            {networks.map(org => {
               const color = org.riskScore >= 90 ? C.red : org.riskScore >= 75 ? C.orange : C.amber;
               const trendIcon = org.trend === 'up' ? <ArrowUpRight size={11} color={C.red} /> : org.trend === 'down' ? <ArrowDownRight size={11} color={C.green} /> : <Minus size={11} color={C.amber} />;
               return (
@@ -738,7 +572,7 @@ const TabNetworkBehavior: React.FC = () => (
                     <span>📁 {org.activeCases} active cases</span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem' }}>
-                    {org.moTags.map(t => (
+                    {org.moTags.map((t: string) => (
                       <span key={t} style={{ padding: '0.1rem 0.4rem', borderRadius: 99, fontSize: '0.62rem', fontWeight: 600, background: `${color}15`, color, border: `1px solid ${color}30` }}>{t}</span>
                     ))}
                   </div>
@@ -767,6 +601,79 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode; badge?: string }[] 
 
 export const PredictiveInsights: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('predictive');
+  const [socioData, setSocioData] = useState<any | null>(null);
+  const [forecastData, setForecastData] = useState<any | null>(null);
+  const [anomalyData, setAnomalyData] = useState<any | null>(null);
+  const [patternsData, setPatternsData] = useState<any | null>(null);
+  const [behavioralData, setBehavioralData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch tab data on demand
+  useEffect(() => {
+    async function loadTab() {
+      try {
+        setLoading(true);
+        if (activeTab === 'socio' && !socioData) {
+          const res = await api.getPredictiveSocio();
+          setSocioData(res);
+        } else if (activeTab === 'predictive' && !forecastData) {
+          const res = await api.getPredictiveForecast();
+          setForecastData(res);
+        } else if (activeTab === 'anomaly' && !anomalyData) {
+          const res = await api.getPredictiveAnomalies();
+          setAnomalyData(res);
+        } else if (activeTab === 'patterns' && !patternsData) {
+          const res = await api.getPredictivePatterns();
+          setPatternsData(res);
+        } else if (activeTab === 'network' && !behavioralData) {
+          const res = await api.getPredictiveBehavioral();
+          setBehavioralData(res);
+        }
+      } catch (err) {
+        console.error("Predictive insights loading error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadTab();
+  }, [activeTab]);
+
+  const getActiveData = () => {
+    if (activeTab === 'socio') return socioData;
+    if (activeTab === 'predictive') return forecastData;
+    if (activeTab === 'anomaly') return anomalyData;
+    if (activeTab === 'patterns') return patternsData;
+    if (activeTab === 'network') return behavioralData;
+    return null;
+  };
+
+  const renderContent = () => {
+    if (loading && !getActiveData()) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+            <div className="pulse-alert" style={{ width: 14, height: 14, background: 'var(--accent-primary)' }} />
+            <span>Computing Predictive AI Insights...</span>
+          </div>
+        </div>
+      );
+    }
+
+    switch (activeTab) {
+      case 'socio':
+        return socioData ? <TabSocioEcon districts={socioData.districts} overlay={socioData.overlay} /> : null;
+      case 'predictive':
+        return forecastData ? <TabPredictive forecast={forecastData.forecast} districts={forecastData.districts} categories={forecastData.categories} /> : null;
+      case 'anomaly':
+        return anomalyData ? <TabAnomaly timeseries={anomalyData.timeseries} events={anomalyData.events} /> : null;
+      case 'patterns':
+        return patternsData ? <TabPatterns heatmap={patternsData.heatmap} trends={patternsData.trends} gaps={patternsData.gaps} /> : null;
+      case 'network':
+        return behavioralData ? <TabNetworkBehavior moTrend={behavioralData.moTrend} radar={behavioralData.radar} networks={behavioralData.networks} matrix={behavioralData.matrix} /> : null;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingBottom: '2.5rem' }}>
@@ -809,11 +716,7 @@ export const PredictiveInsights: React.FC = () => {
 
       {/* Tab content */}
       <div style={{ minHeight: 0 }}>
-        {activeTab === 'socio'      && <TabSocioEcon />}
-        {activeTab === 'predictive' && <TabPredictive />}
-        {activeTab === 'anomaly'    && <TabAnomaly />}
-        {activeTab === 'patterns'   && <TabPatterns />}
-        {activeTab === 'network'    && <TabNetworkBehavior />}
+        {renderContent()}
       </div>
     </div>
   );

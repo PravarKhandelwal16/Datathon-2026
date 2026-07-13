@@ -10,6 +10,7 @@ import {
   Shield, Hash, Crosshair, Network
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import api from '../services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type NodeGroup = 'suspect' | 'victim' | 'location' | 'case' | 'vehicle' | 'organization';
@@ -52,15 +53,6 @@ interface CrimeLink {
   type: LinkType;
   label?: string;
   strength?: number; // 1-3
-}
-
-interface HiddenAssociation {
-  entityA: string;
-  entityB: string;
-  method: string;
-  confidence: number;
-  sharedLinks: number;
-  flag: 'high' | 'medium' | 'low';
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -111,176 +103,23 @@ const MO_COLORS: Record<string, string> = {
   'Narcotics':       '#6d28d9',
 };
 
-// ─── Mock Data ─────────────────────────────────────────────────────────────────
-const NODES: CrimeNode[] = [
-  // Suspects
-  {
-    id: 'S1', name: 'Ravi Kumar B.', group: 'suspect', val: 28,
-    age: 34, dob: '14 Mar 1990', address: '12, Gandhi Nagar, Bengaluru',
-    district: 'Bengaluru Urban', priorConvictions: 4,
-    firs: ['FIR/104/2026', 'FIR/215/2025', 'FIR/087/2024', 'FIR/312/2023'],
-    moTags: ['Chain Snatching', 'Vehicle Theft', 'Pickpocket'],
-    riskScore: 91, jurisdictions: ['Bengaluru Urban', 'Mysuru', 'Mandya'],
-  },
-  {
-    id: 'S2', name: 'Suresh M. Gowda', group: 'suspect', val: 22,
-    age: 29, dob: '08 Jun 1995', address: '7A, Sudama Layout, Mysuru',
-    district: 'Mysuru', priorConvictions: 2,
-    firs: ['FIR/215/2025', 'FIR/189/2024'],
-    moTags: ['Chain Snatching', 'House Breaking'],
-    riskScore: 76, jurisdictions: ['Mysuru', 'Mandya'],
-  },
-  {
-    id: 'S3', name: 'Imran Pasha', group: 'suspect', val: 20,
-    age: 41, dob: '22 Nov 1982', address: '34, Cox Town, Bengaluru',
-    district: 'Bengaluru Urban', priorConvictions: 6,
-    firs: ['FIR/104/2026', 'FIR/501/2025', 'FIR/272/2024', 'FIR/098/2023', 'FIR/400/2022'],
-    moTags: ['Extortion', 'Land Grab', 'Narcotics'],
-    riskScore: 97, jurisdictions: ['Bengaluru Urban', 'Kalaburagi', 'Hubballi-Dharwad'],
-  },
-  {
-    id: 'S4', name: 'Prakash Shetty', group: 'suspect', val: 16,
-    age: 26, dob: '15 Jan 1998', address: '22, Kadri Road, Mangaluru',
-    district: 'Mangaluru', priorConvictions: 1,
-    firs: ['FIR/331/2026'],
-    moTags: ['ATM Fraud', 'Pickpocket'],
-    riskScore: 55, jurisdictions: ['Mangaluru', 'Udupi'],
-  },
-  {
-    id: 'S5', name: 'Venkatesha D.', group: 'suspect', val: 18,
-    age: 37, dob: '03 Apr 1987', address: '9, Devaraj Urs Road, Mysuru',
-    district: 'Mysuru', priorConvictions: 3,
-    firs: ['FIR/189/2024', 'FIR/445/2025', 'FIR/312/2023'],
-    moTags: ['Vehicle Theft', 'House Breaking'],
-    riskScore: 83, jurisdictions: ['Mysuru', 'Bengaluru Urban', 'Chamarajanagara'],
-  },
-  // Victims
-  {
-    id: 'V1', name: 'Anil B. Rao', group: 'victim', val: 12,
-    age: 52, address: 'Majestic, Bengaluru', district: 'Bengaluru Urban',
-    firs: ['FIR/104/2026'],
-  },
-  {
-    id: 'V2', name: 'Kavitha S.', group: 'victim', val: 10,
-    age: 38, address: 'Kuvempunagar, Mysuru', district: 'Mysuru',
-    firs: ['FIR/215/2025', 'FIR/189/2024'],
-  },
-  {
-    id: 'V3', name: 'Nagesh P.', group: 'victim', val: 10,
-    age: 44, address: 'Koramangala, Bengaluru', district: 'Bengaluru Urban',
-    firs: ['FIR/501/2025'],
-  },
-  // Locations
-  {
-    id: 'L1', name: 'Majestic Bus Stand', group: 'location', val: 32,
-    locationType: 'Transit Hub', crimeCount: 38, district: 'Bengaluru Urban',
-  },
-  {
-    id: 'L2', name: 'Lalbagh Road', group: 'location', val: 18,
-    locationType: 'Public Road', crimeCount: 14, district: 'Bengaluru Urban',
-  },
-  {
-    id: 'L3', name: 'Mysuru City Market', group: 'location', val: 22,
-    locationType: 'Commercial', crimeCount: 22, district: 'Mysuru',
-  },
-  // Cases
-  {
-    id: 'C1', name: 'FIR/104/2026', group: 'case', val: 14,
-    firNo: 'FIR/104/2026', ipcSections: ['IPC 379', 'IPC 392'],
-    date: '07 Jan 2026', status: 'Charge Sheet Filed', district: 'Bengaluru Urban',
-  },
-  {
-    id: 'C2', name: 'FIR/215/2025', group: 'case', val: 12,
-    firNo: 'FIR/215/2025', ipcSections: ['IPC 379'],
-    date: '22 Sep 2025', status: 'Investigation', district: 'Mysuru',
-  },
-  {
-    id: 'C3', name: 'FIR/501/2025', group: 'case', val: 12,
-    firNo: 'FIR/501/2025', ipcSections: ['IPC 384', 'IPC 506', 'IPC 420'],
-    date: '14 Nov 2025', status: 'Under Trial', district: 'Bengaluru Urban',
-  },
-  {
-    id: 'C4', name: 'FIR/189/2024', group: 'case', val: 10,
-    firNo: 'FIR/189/2024', ipcSections: ['IPC 454', 'IPC 380'],
-    date: '03 Jun 2024', status: 'Charge Sheet Filed', district: 'Mysuru',
-  },
-  // Vehicles
-  {
-    id: 'VH1', name: 'KA-09-AB-1234', group: 'vehicle', val: 12,
-    regNo: 'KA-09-AB-1234', vehicleType: 'Motorcycle', district: 'Bengaluru Urban',
-  },
-  {
-    id: 'VH2', name: 'KA-55-MC-7890', group: 'vehicle', val: 10,
-    regNo: 'KA-55-MC-7890', vehicleType: 'Hatchback', district: 'Mysuru',
-  },
-  // Organization
-  {
-    id: 'O1', name: 'Majestic Gang', group: 'organization', val: 24,
-    orgType: 'Organized Crime Unit', members: 7, district: 'Bengaluru Urban',
-    moTags: ['Chain Snatching', 'Pickpocket', 'Vehicle Theft'],
-  },
-];
-
-const LINKS: CrimeLink[] = [
-  // Case relationships
-  { source: 'S1', target: 'C1', type: 'accused_in', strength: 3 },
-  { source: 'S3', target: 'C1', type: 'accused_in', strength: 3 },
-  { source: 'V1', target: 'C1', type: 'victim_in',  strength: 2 },
-  { source: 'L1', target: 'C1', type: 'occurred_at', strength: 2 },
-
-  { source: 'S1', target: 'C2', type: 'accused_in', strength: 3 },
-  { source: 'S2', target: 'C2', type: 'accused_in', strength: 3 },
-  { source: 'V2', target: 'C2', type: 'victim_in',  strength: 2 },
-  { source: 'L3', target: 'C2', type: 'occurred_at', strength: 2 },
-
-  { source: 'S3', target: 'C3', type: 'accused_in', strength: 3 },
-  { source: 'V3', target: 'C3', type: 'victim_in',  strength: 2 },
-  { source: 'L2', target: 'C3', type: 'occurred_at', strength: 2 },
-
-  { source: 'S2', target: 'C4', type: 'accused_in', strength: 3 },
-  { source: 'S5', target: 'C4', type: 'accused_in', strength: 3 },
-  { source: 'V2', target: 'C4', type: 'victim_in',  strength: 2 },
-  { source: 'L3', target: 'C4', type: 'occurred_at', strength: 2 },
-
-  // Linked cases (same area/MO)
-  { source: 'C1', target: 'C2', type: 'linked_case', label: 'Same MO Pattern', strength: 2 },
-  { source: 'C2', target: 'C4', type: 'linked_case', label: 'Shared Location', strength: 1 },
-
-  // Derived MO links (hidden associations)
-  { source: 'S1', target: 'S2', type: 'derived_mo', label: 'Shared MO: Chain Snatching', strength: 3 },
-  { source: 'S1', target: 'S3', type: 'associate',  label: 'Known Associate', strength: 3 },
-  { source: 'S2', target: 'S5', type: 'associate',  label: 'Known Associate', strength: 2 },
-  { source: 'S3', target: 'O1', type: 'member_of',  label: 'Gang Leader', strength: 3 },
-  { source: 'S1', target: 'O1', type: 'member_of',  label: 'Gang Member', strength: 2 },
-
-  // Vehicles
-  { source: 'S1', target: 'VH1', type: 'uses_vehicle', label: 'Primary Vehicle', strength: 2 },
-  { source: 'S3', target: 'VH2', type: 'uses_vehicle', label: 'Getaway Vehicle', strength: 2 },
-  { source: 'O1', target: 'VH2', type: 'uses_vehicle', label: 'Gang Vehicle', strength: 1 },
-];
-
-const HIDDEN_ASSOCIATIONS: HiddenAssociation[] = [
-  { entityA: 'Ravi Kumar B.', entityB: 'Suresh M. Gowda',   method: 'Shared MO (Chain Snatching) + Victim overlap',         confidence: 94, sharedLinks: 3, flag: 'high' },
-  { entityA: 'Imran Pasha',   entityB: 'Majestic Gang',       method: 'Co-accused in FIR/104/2026 + Organization membership',  confidence: 99, sharedLinks: 4, flag: 'high' },
-  { entityA: 'Suresh M. Gowda', entityB: 'Venkatesha D.',    method: 'Shared location (Mysuru City Market) + Linked FIRs',    confidence: 81, sharedLinks: 2, flag: 'high' },
-  { entityA: 'Ravi Kumar B.', entityB: 'Venkatesha D.',       method: 'Indirect via FIR/189/2024 — same victim (Kavitha S.)', confidence: 68, sharedLinks: 2, flag: 'medium' },
-  { entityA: 'KA-09-AB-1234', entityB: 'Majestic Bus Stand', method: 'Vehicle sighted at location in 3 independent FIRs',     confidence: 87, sharedLinks: 3, flag: 'high' },
-  { entityA: 'Prakash Shetty', entityB: 'Ravi Kumar B.',      method: 'Shared Pickpocket MO — cross-jurisdiction pattern',     confidence: 52, sharedLinks: 1, flag: 'medium' },
-  { entityA: 'KA-55-MC-7890', entityB: 'Mysuru City Market', method: 'Vehicle spotted near crime scene (FIR/189/2024, FIR/215/2025)', confidence: 78, sharedLinks: 2, flag: 'medium' },
-];
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const SUSPECTS = NODES.filter(n => n.group === 'suspect');
-
-function getNodeConnections(id: string) {
-  return LINKS.filter(l => (l.source as any) === id || (l.target as any) === id);
-}
-
 // ─── Sub: Entity Detail Panel ─────────────────────────────────────────────────
-const EntityDetailPanel: React.FC<{ node: CrimeNode; onClose: () => void }> = ({ node, onClose }) => {
+const EntityDetailPanel: React.FC<{
+  node: CrimeNode;
+  allNodes: CrimeNode[];
+  allLinks: CrimeLink[];
+  onClose: () => void;
+}> = ({ node, allNodes, allLinks, onClose }) => {
   const color = NODE_COLORS[node.group];
   const isSuspect = node.group === 'suspect';
-  const connections = getNodeConnections(node.id);
+
+  const connections = useMemo(() => {
+    return allLinks.filter(l => {
+      const srcId = typeof l.source === 'object' ? (l.source as any).id : l.source;
+      const tgtId = typeof l.target === 'object' ? (l.target as any).id : l.target;
+      return srcId === node.id || tgtId === node.id;
+    });
+  }, [node.id, allLinks]);
 
   const moRadarData = node.moTags?.map(tag => ({ tag, score: Math.floor(Math.random() * 40 + 60) })) ?? [];
 
@@ -392,7 +231,7 @@ const EntityDetailPanel: React.FC<{ node: CrimeNode; onClose: () => void }> = ({
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
               {node.moTags.map(tag => (
-                <span key={tag} className="mo-chip" style={{ background: `${MO_COLORS[tag] ?? '#6b7280'}18`, color: MO_COLORS[tag] ?? '#6b7280', border: `1px solid ${MO_COLORS[tag] ?? '#6b7280'}35` }}>
+                <span key={tag} className="mo-chip" style={{ fontSize: '0.65rem', background: `${MO_COLORS[tag] ?? '#6b7280'}15`, color: MO_COLORS[tag] ?? '#6b7280', border: `1px solid ${MO_COLORS[tag] ?? '#6b7280'}30` }}>
                   {tag}
                 </span>
               ))}
@@ -436,8 +275,10 @@ const EntityDetailPanel: React.FC<{ node: CrimeNode; onClose: () => void }> = ({
             <Link2 size={12} /> Network Connections ({connections.length})
           </div>
           {connections.slice(0, 6).map((l, i) => {
-            const otherId = (l.source as any) === node.id ? (l.target as any) : (l.source as any);
-            const other   = NODES.find(n => n.id === otherId);
+            const srcId = typeof l.source === 'object' ? (l.source as any).id : l.source;
+            const tgtId = typeof l.target === 'object' ? (l.target as any).id : l.target;
+            const otherId = srcId === node.id ? tgtId : srcId;
+            const other   = allNodes.find(n => n.id === otherId);
             if (!other) return null;
             return (
               <div key={i} style={{
@@ -484,15 +325,16 @@ const EntityDetailPanel: React.FC<{ node: CrimeNode; onClose: () => void }> = ({
 
 // ─── Sub: Offender Profile Rail ───────────────────────────────────────────────
 const OffenderRail: React.FC<{
+  suspects: any[];
   selected: string | null;
   onSelect: (id: string) => void;
   search: string;
   onSearch: (v: string) => void;
-}> = ({ selected, onSelect, search, onSearch }) => {
-  const filtered = SUSPECTS.filter(s =>
+}> = ({ suspects, selected, onSelect, search, onSearch }) => {
+  const filtered = suspects.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     s.district?.toLowerCase().includes(search.toLowerCase()) ||
-    s.moTags?.some(m => m.toLowerCase().includes(search.toLowerCase()))
+    s.moTags?.some((m: string) => m.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -508,7 +350,7 @@ const OffenderRail: React.FC<{
           <Users size={14} color="var(--accent-primary)" />
           <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)' }}>Repeat Offenders</span>
           <span style={{ marginLeft: 'auto', background: '#dc2626', color: 'white', borderRadius: 99, fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem' }}>
-            {SUSPECTS.length}
+            {suspects.length}
           </span>
         </div>
         <div style={{ position: 'relative' }}>
@@ -525,7 +367,7 @@ const OffenderRail: React.FC<{
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                 <div style={{ width: 26, height: 26, borderRadius: '50%', background: `${NODE_COLORS.suspect}20`, border: `1.5px solid ${NODE_COLORS.suspect}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: NODE_COLORS.suspect, flexShrink: 0 }}>
-                  {s.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                  {s.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2)}
                 </div>
                 <div>
                   <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.1 }}>{s.name}</div>
@@ -542,7 +384,7 @@ const OffenderRail: React.FC<{
             </div>
             {/* MO chips */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginBottom: '0.3rem' }}>
-              {s.moTags?.slice(0, 2).map(tag => (
+              {s.moTags?.slice(0, 2).map((tag: string) => (
                 <span key={tag} className="mo-chip" style={{ fontSize: '0.6rem', background: `${MO_COLORS[tag] ?? '#6b7280'}15`, color: MO_COLORS[tag] ?? '#6b7280', border: `1px solid ${MO_COLORS[tag] ?? '#6b7280'}30` }}>
                   {tag}
                 </span>
@@ -572,19 +414,19 @@ const OffenderRail: React.FC<{
 };
 
 // ─── Sub: Association Detection Table ─────────────────────────────────────────
-const AssociationTable: React.FC = () => {
+const AssociationTable: React.FC<{ associations: any[] }> = ({ associations }) => {
   const [sortBy, setSortBy] = useState<'confidence' | 'shared' | 'flag'>('confidence');
 
   const sorted = useMemo(() => {
-    const a = [...HIDDEN_ASSOCIATIONS];
+    const a = [...associations];
     if (sortBy === 'confidence') a.sort((x, y) => y.confidence - x.confidence);
     if (sortBy === 'shared')     a.sort((x, y) => y.sharedLinks - x.sharedLinks);
     if (sortBy === 'flag') {
-      const order = { high: 0, medium: 1, low: 2 };
+      const order: Record<string, number> = { high: 0, medium: 1, low: 2 };
       a.sort((x, y) => order[x.flag] - order[y.flag]);
     }
     return a;
-  }, [sortBy]);
+  }, [associations, sortBy]);
 
   return (
     <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -659,6 +501,10 @@ export const NetworkAnalysis: React.FC = () => {
 
   // ── State
   const [activeTab,       setActiveTab]       = useState<ActiveTab>('network');
+  const [rawNodes,        setRawNodes]        = useState<CrimeNode[]>([]);
+  const [rawLinks,        setRawLinks]        = useState<CrimeLink[]>([]);
+  const [suspectsList,    setSuspectsList]    = useState<any[]>([]);
+  const [associations,    setAssociations]    = useState<any[]>([]);
   const [selectedNodeId,  setSelectedNodeId]  = useState<string | null>(null);
   const [highlightedIds,  setHighlightedIds]  = useState<Set<string>>(new Set());
   const [offenderSearch,  setOffenderSearch]  = useState('');
@@ -669,6 +515,32 @@ export const NetworkAnalysis: React.FC = () => {
     new Set(['accused_in', 'victim_in', 'occurred_at', 'linked_case', 'derived_mo', 'associate', 'uses_vehicle', 'member_of'])
   );
   const [showLegend, setShowLegend] = useState(true);
+  const [loading, setLoading] = useState(true);
+
+  // Load from API
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true);
+        const graphRes = await api.getNetworkGraph(
+          Array.from(filterGroups),
+          Array.from(filterLinks)
+        );
+        const offendersRes = await api.getOffenders();
+        const associationsRes = await api.getAssociations();
+
+        setRawNodes(graphRes.nodes);
+        setRawLinks(graphRes.links);
+        setSuspectsList(offendersRes);
+        setAssociations(associationsRes);
+      } catch (err) {
+        console.error("Network intelligence loading error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [filterGroups, filterLinks]);
 
   // Dimensions
   useEffect(() => {
@@ -684,41 +556,45 @@ export const NetworkAnalysis: React.FC = () => {
 
   // ── Filtered graph data
   const graphData = useMemo(() => {
-    const nodes = NODES.filter(n => filterGroups.has(n.group));
+    const nodes = rawNodes.filter(n => filterGroups.has(n.group));
     const nodeIds = new Set(nodes.map(n => n.id));
-    const links = LINKS.filter(l =>
-      filterLinks.has(l.type) &&
-      nodeIds.has(l.source as string) &&
-      nodeIds.has(l.target as string)
-    );
+    const links = rawLinks.filter(l => {
+      const srcId = typeof l.source === 'object' ? (l.source as any).id : l.source;
+      const tgtId = typeof l.target === 'object' ? (l.target as any).id : l.target;
+      return filterLinks.has(l.type) && nodeIds.has(srcId) && nodeIds.has(tgtId);
+    });
     return { nodes: nodes.map(n => ({ ...n })), links: links.map(l => ({ ...l })) };
-  }, [filterGroups, filterLinks]);
+  }, [rawNodes, rawLinks, filterGroups, filterLinks]);
 
   // ── Selection
-  const selectedNode = useMemo(() => NODES.find(n => n.id === selectedNodeId) ?? null, [selectedNodeId]);
+  const selectedNode = useMemo(() => rawNodes.find(n => n.id === selectedNodeId) ?? null, [rawNodes, selectedNodeId]);
 
   const handleNodeClick = useCallback((node: any) => {
     const id = node.id as string;
     setSelectedNodeId(prev => prev === id ? null : id);
     // Highlight connected nodes
     const connected = new Set<string>([id]);
-    LINKS.forEach(l => {
-      if ((l.source as any) === id) connected.add(l.target as string);
-      if ((l.target as any) === id) connected.add(l.source as string);
+    rawLinks.forEach(l => {
+      const srcId = typeof l.source === 'object' ? (l.source as any).id : l.source;
+      const tgtId = typeof l.target === 'object' ? (l.target as any).id : l.target;
+      if (srcId === id) connected.add(tgtId);
+      if (tgtId === id) connected.add(srcId);
     });
     setHighlightedIds(connected);
-  }, []);
+  }, [rawLinks]);
 
   const handleOffenderSelect = useCallback((id: string) => {
     setActiveTab('network');
     setSelectedNodeId(id);
     const connected = new Set<string>([id]);
-    LINKS.forEach(l => {
-      if ((l.source as any) === id) connected.add(l.target as string);
-      if ((l.target as any) === id) connected.add(l.source as string);
+    rawLinks.forEach(l => {
+      const srcId = typeof l.source === 'object' ? (l.source as any).id : l.source;
+      const tgtId = typeof l.target === 'object' ? (l.target as any).id : l.target;
+      if (srcId === id) connected.add(tgtId);
+      if (tgtId === id) connected.add(srcId);
     });
     setHighlightedIds(connected);
-  }, []);
+  }, [rawLinks]);
 
   // ── Toggle helpers
   const toggleGroup = (g: NodeGroup) => {
@@ -747,8 +623,19 @@ export const NetworkAnalysis: React.FC = () => {
     links:    graphData.links.length,
     suspects: graphData.nodes.filter(n => n.group === 'suspect').length,
     orgs:     graphData.nodes.filter(n => n.group === 'organization').length,
-    crossJurisdiction: SUSPECTS.filter(s => (s.jurisdictions?.length ?? 0) > 1).length,
-  }), [graphData]);
+    crossJurisdiction: suspectsList.filter(s => (s.jurisdictions?.length ?? 0) > 1).length,
+  }), [graphData, suspectsList]);
+
+  if (loading && rawNodes.length === 0) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+          <div className="pulse-alert" style={{ width: 14, height: 14, background: 'var(--accent-primary)' }} />
+          <span>Constructing Criminological Link Network...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 8rem)', gap: '0.7rem' }}>
@@ -783,7 +670,7 @@ export const NetworkAnalysis: React.FC = () => {
         <button className={`network-tab${activeTab === 'associations' ? ' active' : ''}`} onClick={() => setActiveTab('associations')}>
           <GitBranch size={13} /> Association Detection
           <span style={{ background: '#dc2626', color: 'white', borderRadius: 99, fontSize: '0.6rem', fontWeight: 700, padding: '0 0.3rem', marginLeft: 2 }}>
-            {HIDDEN_ASSOCIATIONS.filter(a => a.flag === 'high').length}
+            {associations.filter(a => a.flag === 'high').length}
           </span>
         </button>
 
@@ -837,6 +724,7 @@ export const NetworkAnalysis: React.FC = () => {
 
         {/* Left: Offender Rail */}
         <OffenderRail
+          suspects={suspectsList}
           selected={selectedNodeId}
           onSelect={handleOffenderSelect}
           search={offenderSearch}
@@ -858,8 +746,10 @@ export const NetworkAnalysis: React.FC = () => {
                   linkDirectionalParticleWidth={(l: any) => (l.strength ?? 1) * 1.5}
                   linkColor={(l: any) => {
                     const base = LINK_COLORS[l.type as LinkType] ?? '#6b7280';
+                    const srcId = typeof l.source === 'object' ? (l.source as any).id : l.source;
+                    const tgtId = typeof l.target === 'object' ? (l.target as any).id : l.target;
                     const isHighlighted = highlightedIds.size === 0 ||
-                      (highlightedIds.has(l.source?.id ?? l.source) && highlightedIds.has(l.target?.id ?? l.target));
+                      (highlightedIds.has(srcId) && highlightedIds.has(tgtId));
                     return isHighlighted ? base : `${base}30`;
                   }}
                   linkWidth={(l: any) => (l.strength ?? 1) * 0.8}
@@ -975,7 +865,7 @@ export const NetworkAnalysis: React.FC = () => {
                   backdropFilter: 'blur(6px)', whiteSpace: 'nowrap',
                   pointerEvents: 'none',
                 }}>
-                  Click a node to highlight its network · Click an offender on the left to focus
+                  Click a node to highlight its network · Click offender on the left to focus
                 </div>
               )}
             </>
@@ -987,14 +877,14 @@ export const NetworkAnalysis: React.FC = () => {
                   <AlertTriangle size={16} color="#dc2626" />
                   <h3 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Hidden Criminal Associations</h3>
                   <span className="badge badge-critical" style={{ marginLeft: '0.25rem' }}>
-                    {HIDDEN_ASSOCIATIONS.filter(a => a.flag === 'high').length} High Priority
+                    {associations.filter(a => a.flag === 'high').length} High Priority
                   </span>
                 </div>
                 <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                   Algorithmically detected entity relationships invisible in isolated spreadsheets. Each association is scored by shared evidence links and MO overlap.
                 </p>
               </div>
-              <AssociationTable />
+              <AssociationTable associations={associations} />
             </div>
           )}
         </div>
@@ -1003,6 +893,8 @@ export const NetworkAnalysis: React.FC = () => {
         {selectedNode && (
           <EntityDetailPanel
             node={selectedNode}
+            allNodes={rawNodes}
+            allLinks={rawLinks}
             onClose={() => { setSelectedNodeId(null); setHighlightedIds(new Set()); }}
           />
         )}
