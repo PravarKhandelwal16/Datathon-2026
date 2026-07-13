@@ -144,3 +144,6 @@ env/
 .vscode/
 *.swp
 *.swo
+
+# Others
+*.pdf
