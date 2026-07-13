@@ -124,6 +124,7 @@ const DrillDownPanel: React.FC<{
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
       flexShrink: 0,
+      zIndex: 1000, position: 'relative'
     }}>
       {/* Header */}
       <div style={{
@@ -290,6 +291,7 @@ const AlertsRail: React.FC<{
       background: 'var(--bg-secondary)',
       borderLeft: '1px solid var(--border-color)',
       flexShrink: 0,
+      zIndex: 1000, position: 'relative'
     }}>
       {/* Rail Header */}
       <div style={{ padding: '1rem 1.1rem 0.75rem', borderBottom: '1px solid var(--border-color)' }}>

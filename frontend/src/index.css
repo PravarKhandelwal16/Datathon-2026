@@ -157,6 +157,16 @@ p {
   100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
 }
 
+@keyframes svg-pulse {
+  0% { stroke-opacity: 1; stroke-width: 2.5px; }
+  50% { stroke-opacity: 0.2; stroke-width: 8px; }
+  100% { stroke-opacity: 1; stroke-width: 2.5px; }
+}
+
+.leaflet-alert-ring {
+  animation: svg-pulse 2s infinite ease-in-out;
+}
+
 @keyframes slide-in-right {
   from { transform: translateX(100%); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
@@ -192,6 +202,7 @@ p {
 /* Drill-down panel slide animation */
 .drill-down-panel {
   animation: slide-in-right 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1000;
 }
 
 /* Alert card entry */

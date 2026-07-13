@@ -496,7 +496,21 @@ type ActiveTab = 'network' | 'associations';
 export const NetworkAnalysis: React.FC = () => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+
   const containerRef = useRef<HTMLDivElement>(null);
+  const timeRef = useRef(0);
+
+  // Animation loop for canvas pulsing
+  useEffect(() => {
+    let frame: number;
+    const tick = () => {
+      timeRef.current += 1;
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
 
   // ── State
@@ -787,6 +801,16 @@ export const NetworkAnalysis: React.FC = () => {
                     ctx.lineWidth   = isSelected ? 2.5 : 1.5;
                     ctx.stroke();
                     ctx.shadowBlur  = 0;
+
+                    // Pulse animation for high-risk suspects
+                    if (n.group === 'suspect' && n.riskScore && n.riskScore >= 75) {
+                      const pulse = (timeRef.current % 120) / 120; // 0 to 1
+                      ctx.beginPath();
+                      ctx.arc(n.x, n.y, radius + (pulse * 15), 0, 2 * Math.PI);
+                      ctx.strokeStyle = `rgba(220, 38, 38, ${(1 - pulse) * alpha})`;
+                      ctx.lineWidth = 1.5;
+                      ctx.stroke();
+                    }
 
                     // Icon
                     const iconSize = Math.max(6, radius * 0.9);

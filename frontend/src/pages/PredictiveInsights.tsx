@@ -75,7 +75,7 @@ const RiskBar: React.FC<{ score: number; max?: number }> = ({ score, max = 100 }
 const TabSocioEcon: React.FC<{ districts: any[]; overlay: any[] }> = ({ districts, overlay }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
     {/* Ribbon */}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
       <StatBadge label="Urbanization-Crime r²" value="0.81"   color={C.violet} icon={<MapPin size={16} color={C.violet} />} sub="Strong positive correlation" />
       <StatBadge label="Poverty Index Impact"   value="+2.4×" color={C.red}    icon={<Users size={16} color={C.red} />}    sub="Per unit increase in crime" />
       <StatBadge label="Unemployment Corr."     value="0.74"   color={C.orange} icon={<Activity size={16} color={C.orange} />} sub="District level R²" />
@@ -183,7 +183,7 @@ const TabSocioEcon: React.FC<{ districts: any[]; overlay: any[] }> = ({ district
 // ─── TAB: Predictive Risk Scoring ─────────────────────────────────────────────
 const TabPredictive: React.FC<{ forecast: any[]; districts: any[]; categories: any[] }> = ({ forecast, districts, categories }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
       <StatBadge label="Forecast Horizon"     value="6 mo"  color={C.blue}   icon={<Calendar size={16} color={C.blue} />}   sub="AI confidence: 87%" />
       <StatBadge label="High-Risk Districts"  value="4"     color={C.red}    icon={<Target size={16} color={C.red} />}     sub="Risk score ≥ 65" />
       <StatBadge label="Predicted Crime Growth"value="+19%" color={C.orange} icon={<TrendingUp size={16} color={C.orange} />} sub="Q4 2025 projection" />
@@ -277,7 +277,7 @@ const TabAnomaly: React.FC<{ timeseries: any[]; events: AnomalyEvent[] }> = ({ t
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
         <StatBadge label="Anomalies Detected"   value={events.length}    color={C.red}    icon={<Zap size={16} color={C.red} />}    sub="Last 24 hours" />
         <StatBadge label="Critical Anomalies"   value={events.filter(a => a.severity === 'critical').length} color={C.red} icon={<AlertTriangle size={16} color={C.red} />} sub="Immediate attention" />
         <StatBadge label="Avg Deviation"        value="44%"  color={C.orange} icon={<Activity size={16} color={C.orange} />} sub="Above baseline" />
@@ -371,7 +371,7 @@ const TabPatterns: React.FC<{ heatmap: any[]; trends: any[]; gaps: any[] }> = ({
   const cellMax = Math.max(...heatmap.map(c => c.value), 1);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
         <StatBadge label="Peak Crime Day"   value="Saturday"  color={C.red}    icon={<Calendar size={16} color={C.red} />}    sub="22% above weekday avg" />
         <StatBadge label="Peak Crime Hour"  value="20:00–21:00" color={C.orange} icon={<Clock size={16} color={C.orange} />} sub="110 avg incidents/hr" />
         <StatBadge label="Fastest Growing"  value="Cyber Fraud" color={C.violet} icon={<TrendingUp size={16} color={C.violet} />} sub="+223% in 12 months" />
@@ -472,7 +472,7 @@ const TabPatterns: React.FC<{ heatmap: any[]; trends: any[]; gaps: any[] }> = ({
 // ─── TAB: Network & Behavioral Analysis ───────────────────────────────────────
 const TabNetworkBehavior: React.FC<{ moTrend: any[]; radar: any[]; networks: any[]; matrix: any[] }> = ({ moTrend, radar, networks, matrix }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.7rem', flexShrink: 0 }}>
       <StatBadge label="Active Crime Networks"  value={networks.length}    color={C.pink}   icon={<Network size={16} color={C.pink} />}   sub="Identified organized groups" />
       <StatBadge label="Top MO: Chain Snatching" value="+112%" color={C.red}  icon={<TrendingUp size={16} color={C.red} />} sub="12-month growth" />
       <StatBadge label="Cross-Jurisdiction MOs"  value="4"    color={C.violet} icon={<MapPin size={16} color={C.violet} />} sub="Spanning 2+ districts" />
@@ -653,7 +653,7 @@ export const PredictiveInsights: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
             <div className="pulse-alert" style={{ width: 14, height: 14, background: 'var(--accent-primary)' }} />
-            <span>Computing Predictive AI Insights...</span>
+            <span>Zia AI: Analyzing Predictive Models...</span>
           </div>
         </div>
       );
@@ -682,7 +682,7 @@ export const PredictiveInsights: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
           <Brain size={20} color="var(--accent-primary)" />
           <h2 style={{ margin: 0, fontSize: '1.15rem' }}>Strategic Intelligence Hub</h2>
-          <span style={{ padding: '0.15rem 0.5rem', borderRadius: 99, fontSize: '0.65rem', fontWeight: 700, background: 'rgba(124,58,237,0.12)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.25)' }}>AI-Driven</span>
+          <span style={{ padding: '0.15rem 0.5rem', borderRadius: 99, fontSize: '0.65rem', fontWeight: 700, background: 'rgba(124,58,237,0.12)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.25)' }}>Powered by Catalyst Zia</span>
         </div>
         <p style={{ margin: 0, fontSize: '0.78rem' }}>Sociological correlations, predictive modeling, anomaly detection, and behavioral pattern analysis across Karnataka</p>
       </div>
@@ -710,7 +710,7 @@ export const PredictiveInsights: React.FC = () => {
           </button>
         ))}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-          <Info size={12} /> Data: SCRB Karnataka · Model: v2.4
+          <Info size={12} /> Data: SCRB Karnataka · Model: Catalyst Zia v2.4
         </div>
       </div>
 

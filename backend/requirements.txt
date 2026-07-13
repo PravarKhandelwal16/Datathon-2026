@@ -7,3 +7,5 @@ scikit-learn
 xgboost
 pandas
 numpy
+openai
+python-dotenv
